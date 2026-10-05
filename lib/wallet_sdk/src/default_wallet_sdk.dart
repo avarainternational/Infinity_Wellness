@@ -1,6 +1,22 @@
 import 'dart:math';
+import 'package:employee_wellness/wallet_sdk/src/recovery/rewards_recovery_service.dart';
+import 'package:employee_wellness/wallet_sdk/src/roster/app_master_roster_service.dart';
+import 'package:employee_wellness/wallet_sdk/src/authorization/rewards_access_service.dart';
+import 'package:employee_wellness/wallet_sdk/src/storage/rewards_send_store.dart';
+import 'package:employee_wellness/wallet_sdk/src/transport/rewards_send_client.dart';
+import 'package:employee_wellness/wallet_sdk/src/transfers/rewards_send_service.dart';
+import 'package:employee_wellness/wallet_sdk/src/authorization/transfer_authorization_service.dart';
+import 'package:employee_wellness/wallet_sdk/src/protocol/rewards_amount.dart';
+import 'package:employee_wellness/wallet_sdk/src/transport/rewards_transfer_client.dart';
+import 'package:employee_wellness/wallet_sdk/src/transport/rewards_recipient_client.dart';
+import 'package:employee_wellness/wallet_sdk/src/crypto/strkey_codec.dart';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:employee_wellness/wallet_sdk/src/transport/rewards_history_client.dart';
+import 'package:employee_wellness/wallet_sdk/src/activation/active_rewards_migration_service.dart';
+import 'package:employee_wellness/wallet_sdk/src/transport/rewards_balance_client.dart';
+import 'package:employee_wellness/wallet_sdk/src/activation/activation_finalization_service.dart';
+import 'package:employee_wellness/wallet_sdk/src/storage/active_rewards_store.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:employee_wellness/wallet_sdk/src/activation/activation_token_generator.dart';
 import 'package:employee_wellness/wallet_sdk/src/activation/activation_response_service.dart';
@@ -23,10 +39,11 @@ import 'package:employee_wellness/wallet_sdk/src/transport/horizon_health_client
 import 'package:employee_wellness/wallet_sdk/src/transport/distributor_status_client.dart';
 import 'package:employee_wellness/wallet_sdk/src/transport/activation_submission_client.dart';
 import 'package:employee_wellness/wallet_sdk/src/transport/activation_reconciliation_client.dart';
+import 'package:employee_wellness/wallet_sdk/src/transport/horizon_http_client.dart';
 import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
 
 final class DefaultWalletSdk implements WalletSdk {
-  DefaultWalletSdk({
+  factory DefaultWalletSdk({
     FlutterSecureStorage? secureStorage,
     DateTime Function()? now,
     Random? random,
@@ -50,7 +67,108 @@ final class DefaultWalletSdk implements WalletSdk {
     StellarActivationProtocol? stellarProtocol,
     ConfigurationHandshakeService? configurationHandshakeService,
     ConfigurationHandshakeStore? configurationHandshakeStore,
-  }) : _activationStore = activationStore ?? PreferencesActivationStore(),
+    HorizonHttpClient? horizonHttpClient,
+    ActiveRewardsStore? activeRewardsStore,
+    RewardsBalanceClient? rewardsBalanceClient,
+    RewardsHistoryClient? rewardsHistoryClient,
+    RewardsRecipientClient? rewardsRecipientClient,
+    RewardsTransferClient? rewardsTransferClient,
+    TransferAuthenticator? transferAuthenticator,
+    RewardsSendStore? rewardsSendStore,
+    RewardsSendClient? rewardsSendClient,
+  }) => DefaultWalletSdk._(
+    secureStorage: secureStorage,
+    now: now,
+    random: random,
+    keyGenerator: keyGenerator,
+    qrCodec: qrCodec,
+    activationStore: activationStore,
+    credentialStore: credentialStore,
+    clock: clock,
+    tokenGenerator: tokenGenerator,
+    configurationPolicy: configurationPolicy,
+    configurationStore: configurationStore,
+    horizonHealthClient: horizonHealthClient,
+    deviceIdentityService: deviceIdentityService,
+    activationInspectionStore: activationInspectionStore,
+    distributorAuthorityService: distributorAuthorityService,
+    distributorStatusClient: distributorStatusClient,
+    activationResponseService: activationResponseService,
+    activationSubmissionStore: activationSubmissionStore,
+    activationSubmissionClient: activationSubmissionClient,
+    activationReconciliationClient: activationReconciliationClient,
+    stellarProtocol: stellarProtocol,
+    configurationHandshakeService: configurationHandshakeService,
+    configurationHandshakeStore: configurationHandshakeStore,
+    horizonHttpClient: horizonHttpClient ?? HorizonHttpClient(),
+    activeRewardsStore: activeRewardsStore,
+    rewardsBalanceClient: rewardsBalanceClient,
+    rewardsHistoryClient: rewardsHistoryClient,
+    rewardsRecipientClient: rewardsRecipientClient,
+    rewardsTransferClient: rewardsTransferClient,
+    transferAuthenticator: transferAuthenticator,
+    rewardsSendStore: rewardsSendStore,
+    rewardsSendClient: rewardsSendClient,
+  );
+
+  DefaultWalletSdk._({
+    FlutterSecureStorage? secureStorage,
+    DateTime Function()? now,
+    Random? random,
+    WalletKeyGenerator? keyGenerator,
+    ActivationQrCodec? qrCodec,
+    ActivationStore? activationStore,
+    CredentialStore? credentialStore,
+    WalletClock? clock,
+    ActivationTokenGenerator? tokenGenerator,
+    ConfigurationPolicy configurationPolicy = const ConfigurationPolicy(),
+    ConfigurationStore? configurationStore,
+    HorizonHealthClient? horizonHealthClient,
+    DeviceConfigurationIdentityService? deviceIdentityService,
+    ActivationInspectionStore? activationInspectionStore,
+    DistributorAuthorityService? distributorAuthorityService,
+    DistributorStatusClient? distributorStatusClient,
+    ActivationResponseService? activationResponseService,
+    ActivationSubmissionStore? activationSubmissionStore,
+    ActivationSubmissionClient? activationSubmissionClient,
+    ActivationReconciliationClient? activationReconciliationClient,
+    StellarActivationProtocol? stellarProtocol,
+    ConfigurationHandshakeService? configurationHandshakeService,
+    ConfigurationHandshakeStore? configurationHandshakeStore,
+    required HorizonHttpClient horizonHttpClient,
+    ActiveRewardsStore? activeRewardsStore,
+    RewardsBalanceClient? rewardsBalanceClient,
+    RewardsHistoryClient? rewardsHistoryClient,
+    RewardsRecipientClient? rewardsRecipientClient,
+    RewardsTransferClient? rewardsTransferClient,
+    TransferAuthenticator? transferAuthenticator,
+    RewardsSendStore? rewardsSendStore,
+    RewardsSendClient? rewardsSendClient,
+  }) : _rosterService = AppMasterRosterService(horizonHttpClient),
+       _rewardsSendStore =
+           rewardsSendStore ??
+           ProtectedRewardsSendStore(secureStorage: secureStorage),
+       _rewardsSendClient =
+           rewardsSendClient ??
+           DirectRewardsSendClient(transport: horizonHttpClient),
+       _transferAuthenticator =
+           transferAuthenticator ?? NativeTransferAuthenticator(),
+       _rewardsTransferClient =
+           rewardsTransferClient ??
+           DirectRewardsTransferClient(transport: horizonHttpClient),
+       _rewardsRecipientClient =
+           rewardsRecipientClient ??
+           DirectRewardsRecipientClient(transport: horizonHttpClient),
+       _rewardsHistoryClient =
+           rewardsHistoryClient ??
+           DirectRewardsHistoryClient(transport: horizonHttpClient),
+       _rewardsBalanceClient =
+           rewardsBalanceClient ??
+           DirectRewardsBalanceClient(transport: horizonHttpClient),
+       _activeRewardsStore =
+           activeRewardsStore ??
+           ProtectedActiveRewardsStore(secureStorage: secureStorage),
+       _activationStore = activationStore ?? PreferencesActivationStore(),
        _credentialStore =
            credentialStore ?? SecureCredentialStore(storage: secureStorage),
        _clock =
@@ -73,7 +191,8 @@ final class DefaultWalletSdk implements WalletSdk {
            configurationStore ??
            ProtectedConfigurationStore(secureStorage: secureStorage),
        _horizonHealthClient =
-           horizonHealthClient ?? DirectHorizonHealthClient(),
+           horizonHealthClient ??
+           DirectHorizonHealthClient(transport: horizonHttpClient),
        _activationInspectionStore =
            activationInspectionStore ??
            ProtectedActivationInspectionStore(secureStorage: secureStorage),
@@ -83,20 +202,24 @@ final class DefaultWalletSdk implements WalletSdk {
              store: ProtectedDistributorAuthorityStore(
                secureStorage: secureStorage,
              ),
-             verifier: HorizonDistributorAccountVerifier(),
+             verifier: HorizonDistributorAccountVerifier(
+               transport: horizonHttpClient,
+             ),
            ),
        _distributorStatusClient =
-           distributorStatusClient ?? DirectDistributorStatusClient(),
+           distributorStatusClient ??
+           DirectDistributorStatusClient(transport: horizonHttpClient),
        _activationResponseService =
            activationResponseService ??
            ActivationResponseService(random: random),
        _activationSubmissionStore =
            activationSubmissionStore ?? PreferencesActivationSubmissionStore(),
        _activationSubmissionClient =
-           activationSubmissionClient ?? DirectActivationSubmissionClient(),
+           activationSubmissionClient ??
+           DirectActivationSubmissionClient(transport: horizonHttpClient),
        _activationReconciliationClient =
            activationReconciliationClient ??
-           DirectActivationReconciliationClient(),
+           DirectActivationReconciliationClient(transport: horizonHttpClient),
        _stellarProtocol = stellarProtocol ?? StellarActivationProtocol(),
        _configurationHandshakeService =
            configurationHandshakeService ??
@@ -108,7 +231,895 @@ final class DefaultWalletSdk implements WalletSdk {
   static const String _credentialKeyPrefix = 'rewards.activation.secret.';
   static const Duration _requestLifetime = Duration(minutes: 15);
 
+  final RewardsBalanceClient _rewardsBalanceClient;
+  final RewardsRecipientClient _rewardsRecipientClient;
+  final RewardsTransferClient _rewardsTransferClient;
+  final RewardsSendStore _rewardsSendStore;
+  final RewardsSendClient _rewardsSendClient;
+  final AppMasterRosterService _rosterService;
+
+  @override
+  Future<AppMasterRosterPage> getAppMasterRoster({
+    String? cursor,
+    int limit = 20,
+  }) async {
+    try {
+      final config = await _configurationStore.readActive();
+      final account = await _distributorAuthorityService.readAccountId();
+      if (config == null || account == null) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rosterAccessDenied,
+          safeMessage:
+              'Complete authorized App Master setup before loading Builder access.',
+          canRetry: false,
+        );
+      }
+      final ledger = await _distributorStatusClient.load(
+        configuration: config,
+        accountId: account,
+      );
+      if (ledger.nonNativeAssets.length != 1) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.activationPolicyUnavailable,
+          safeMessage: 'Rewards asset settings need review.',
+          canRetry: false,
+        );
+      }
+      final asset = ledger.nonNativeAssets.single;
+      final page = await _rosterService.load(
+        configuration: config,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer,
+        authorityAccount: account,
+        limit: limit,
+        cursor: cursor,
+      );
+      if ((await _configurationStore.readActive())?.encodeProtected() !=
+              config.encodeProtected() ||
+          await _distributorAuthorityService.readAccountId() != account) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rosterAccessDenied,
+          safeMessage:
+              'App Master settings changed. Authorize and refresh Builder access.',
+          canRetry: false,
+        );
+      }
+      return page;
+    } on WalletSdkException {
+      rethrow;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rosterUnavailable,
+        safeMessage:
+            'Builder access is unavailable. Refresh or contact your administrator.',
+        canRetry: true,
+      );
+    }
+  }
+
+  late final RewardsSendService _sendService = RewardsSendService(
+    store: _rewardsSendStore,
+    credentials: _credentialStore,
+    client: _rewardsSendClient,
+    clock: _clock,
+    protocol: _stellarProtocol,
+  );
+  static bool _approvingSend = false;
+  static bool _authorizingAccess = false;
+  late final RewardsAccessService _access = RewardsAccessService(
+    store: _credentialStore,
+    authenticator: _transferAuthenticator,
+    clock: _clock,
+    revokeTransfer: () {
+      _preparedTransfer = null;
+      _authorization.invalidate();
+    },
+  );
+
+  @override
+  Future<RewardsAccessState> getRewardsAccessState() => _access.status();
+
+  @override
+  Future<void> lockRewards() async {
+    _access.lock();
+    await _authorization.cancel();
+  }
+
+  @override
+  Future<void> unlockRewards() async {
+    if (_approvingSend || _authorizingAccess) throw _accessBusy();
+    _authorizingAccess = true;
+    try {
+      final identity = await _activeRewardsStore.read();
+      if (identity == null) throw _accessBusy();
+      identity.validate();
+      if (await _credentialStore.read(identity.credentialKey) == null) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsAccessRemoved,
+          safeMessage: 'Restore Rewards from your backup to use this account.',
+          canRetry: false,
+        );
+      }
+      await lockRewards();
+      await _access.unlock(identity.accountId);
+    } finally {
+      _authorizingAccess = false;
+    }
+  }
+
+  @override
+  Future<void> removeRewardsAccess() async {
+    if (_approvingSend || _authorizingAccess || _preparingTransfer) {
+      throw _accessBusy();
+    }
+    _authorizingAccess = true;
+    try {
+      final identity = await _requireActiveRewards();
+      Future<void> validate() async {
+        final saved = await getRewardsTransferStatus();
+        if (saved?.state == RewardsTransferState.uncertain) {
+          throw const WalletSdkException(
+            code: WalletSdkFailureCode.rewardsTransferPending,
+            safeMessage: 'Verify the pending transfer before removing access.',
+            canRetry: true,
+          );
+        }
+        if ((await _requireActiveRewards()).encode() != identity.encode()) {
+          throw _accessBusy();
+        }
+      }
+
+      await validate();
+      await lockRewards();
+      await _access.remove(identity.accountId, validate);
+    } finally {
+      _authorizingAccess = false;
+    }
+  }
+
+  WalletSdkException _accessBusy() => const WalletSdkException(
+    code: WalletSdkFailureCode.rewardsAccessUnavailable,
+    safeMessage:
+        'Rewards access is unavailable or another protected operation is in progress.',
+    canRetry: true,
+  );
+
+  late final RewardsRecoveryService _recovery = RewardsRecoveryService(
+    _credentialStore,
+    _activeRewardsStore,
+    _rewardsSendStore,
+  );
+
+  Future<T> _recoveryAction<T>(
+    String reason,
+    Future<T> Function(void Function()) action,
+  ) async {
+    if (_approvingSend || _authorizingAccess || _preparingTransfer) {
+      throw _accessBusy();
+    }
+    _authorizingAccess = true;
+    late T result;
+    try {
+      await lockRewards();
+      await _access.protect(reason, (check) async {
+        result = await action(check);
+      });
+      return result;
+    } on WalletSdkException {
+      rethrow;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsAccessUnavailable,
+        safeMessage:
+            'Recovery could not complete. Check your backup and password, and preserve the backup before trying again.',
+        canRetry: true,
+      );
+    } finally {
+      _authorizingAccess = false;
+    }
+  }
+
+  @override
+  Future<String> createRewardsBackup(String password) => _recoveryAction(
+    'Authenticate to create your encrypted Rewards backup.',
+    (check) async {
+      final identity = await _requireActiveRewards();
+      final backup = await _recovery.create(password);
+      check();
+      if ((await _requireActiveRewards()).encode() != identity.encode()) {
+        throw _accessBusy();
+      }
+      check();
+      return backup;
+    },
+  );
+
+  @override
+  Future<void> confirmRewardsBackup(String backup, String password) =>
+      _recoveryAction<void>(
+        'Authenticate to verify your saved Rewards backup.',
+        (check) async {
+          await _requireActiveRewards();
+          check();
+          await _recovery.confirm(backup.trim(), password);
+          check();
+        },
+      );
+
+  @override
+  Future<void> restoreRewardsBackup(
+    String backup,
+    String password,
+  ) => _recoveryAction<void>('Authenticate to restore Rewards on this device.', (
+    check,
+  ) async {
+    final imported = await _recovery.decode(backup.trim(), password);
+    final existing = await _activeRewardsStore.read();
+    final activation = await _activationSubmissionStore.read();
+    if (existing == null &&
+        (await _activationStore.read() != null || activation != null)) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsAccessUnavailable,
+        safeMessage:
+            'Resolve or cancel this device’s activation before restoring another account.',
+        canRetry: false,
+      );
+    }
+    if (existing != null && existing.encode() != imported.identity.encode()) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsAccessUnavailable,
+        safeMessage:
+            'This device already holds a different Rewards account. Use its own backup or a clean installation.',
+        canRetry: false,
+      );
+    }
+    final saved = await _rewardsSendStore.read();
+    if (saved != null &&
+        (saved.source != imported.identity.accountId ||
+            saved.environment != imported.identity.environment ||
+            saved.code != imported.identity.assetCode ||
+            saved.issuer != imported.identity.assetIssuer)) {
+      throw _accessBusy();
+    }
+    if (saved != null &&
+        imported.transfer != null &&
+        imported.transfer!.isPending &&
+        saved.hash != imported.transfer!.hash) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsTransferPending,
+        safeMessage:
+            'The backup contains a different unresolved transfer. Preserve both records and ask App Master for help, or restore on a clean installation.',
+        canRetry: false,
+      );
+    }
+    check();
+    await _access.saveMarker('erased:${imported.identity.accountId}');
+    await _credentialStore.write(
+      key: imported.identity.credentialKey,
+      value: imported.secret,
+    );
+    if (await _credentialStore.read(imported.identity.credentialKey) !=
+        imported.secret) {
+      throw _accessBusy();
+    }
+    await _activeRewardsStore.write(imported.identity);
+    if ((await _activeRewardsStore.read())?.encode() !=
+        imported.identity.encode()) {
+      throw _accessBusy();
+    }
+    if (saved == null && imported.transfer != null) {
+      await _rewardsSendStore.write(imported.transfer!);
+    }
+    final restoredActivation = ActivationSubmissionRecord(
+      responseId: imported.identity.responseId,
+      transactionHash: imported.identity.activationTransactionHash,
+      status: ActivationSubmissionStatus.verified,
+    );
+    await _activationSubmissionStore.write(restoredActivation);
+    if ((await _activationSubmissionStore.read())?.encode() !=
+        restoredActivation.encode()) {
+      throw _accessBusy();
+    }
+    check();
+    await _access.saveMarker('active');
+  });
+
+  @override
+  Future<void> eraseRewardsFromDevice() => _recoveryAction<void>(
+    'Permanently remove Rewards credentials from this device. Your saved backup will be required to restore access.',
+    (check) async {
+      final identity = await _activeRewardsStore.read();
+      if (identity == null) throw _accessBusy();
+      identity.validate();
+      final saved = await _rewardsSendStore.read();
+      if (saved?.isPending ?? false) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsTransferPending,
+          safeMessage:
+              'Resolve the pending transfer before removing this device.',
+          canRetry: true,
+        );
+      }
+      if (await _credentialStore.read(RewardsRecoveryService.confirmationKey) !=
+          await _recovery.confirmation(identity, saved)) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsAccessUnavailable,
+          safeMessage:
+              'Create and verify a current backup before removing this device.',
+          canRetry: false,
+        );
+      }
+      check();
+      await _access.saveMarker('erasing:${identity.accountId}');
+      await _credentialStore.delete(identity.credentialKey);
+      if (await _credentialStore.read(identity.credentialKey) != null) {
+        throw _accessBusy();
+      }
+      await _access.saveMarker('erased:${identity.accountId}');
+      // Keep only protected public identity/evidence for same-account restoration.
+      // App Master credentials and service configuration are independent and untouched.
+    },
+  );
+
+  @override
+  Future<RewardsTransferOutcome?> getRewardsTransferStatus({
+    bool reconcile = false,
+  }) async {
+    final identity = await _requireActiveRewards();
+    final configuration = await _configurationStore.readActive();
+    if (configuration == null ||
+        configuration.environment != identity.environment) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsSendUnavailable,
+        safeMessage:
+            'Your Rewards service settings need attention from App Master.',
+        canRetry: true,
+      );
+    }
+    return _sendService.restore(identity, configuration, reconcile: reconcile);
+  }
+
+  @override
+  Future<RewardsTransferOutcome> approveRewardsTransfer(String reviewId) async {
+    if (_approvingSend || _authorizingAccess) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsSendUnavailable,
+        safeMessage: 'A send is already in progress. Check its status.',
+        canRetry: true,
+      );
+    }
+    _approvingSend = true;
+    try {
+      final saved = await getRewardsTransferStatus();
+      if (saved?.reviewId == reviewId) return saved!;
+      if (saved?.state == RewardsTransferState.uncertain) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsTransferPending,
+          safeMessage: 'Verify the previous transfer before sending again.',
+          canRetry: true,
+        );
+      }
+      final review = await getPreparedRewardsTransfer(reviewId);
+      final prepared = _preparedTransfer!;
+      await authorizeRewardsTransfer(reviewId);
+      return await _sendService.send(
+        review: review,
+        identity: prepared.identity,
+        configuration: prepared.configuration,
+        sourceSequence: prepared.cost.sequence,
+        revalidate: () => _revalidateTransfer(prepared),
+        approvalValid: () =>
+            _access.isUnlocked && _authorization.isValid(review),
+        consumeApproval: () =>
+            _access.isUnlocked && _authorization.consume(review),
+      );
+    } on WalletSdkException {
+      rethrow;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsSendUnavailable,
+        safeMessage:
+            'We could not safely send this transfer. Check its saved status.',
+        canRetry: true,
+      );
+    } finally {
+      _authorization.invalidate();
+      _preparedTransfer = null;
+      _approvingSend = false;
+    }
+  }
+
+  @override
+  Future<RewardsTransferOutcome?> resolvePendingRewardsTransfer({
+    String? competingTransactionHash,
+  }) async {
+    if (_authorizingAccess || _approvingSend) throw _accessBusy();
+    final identity = await _requireActiveRewards();
+    final config = await _configurationStore.readActive();
+    if (config == null || config.environment != identity.environment) {
+      throw _accessBusy();
+    }
+    return _sendService.resolve(
+      identity,
+      config,
+      competingHash: competingTransactionHash?.trim().toLowerCase(),
+    );
+  }
+
+  final TransferAuthenticator _transferAuthenticator;
+  late final TransferAuthorizationService _authorization =
+      TransferAuthorizationService(
+        authenticator: _transferAuthenticator,
+        clock: _clock,
+      );
+  _PreparedTransfer? _preparedTransfer;
+  static bool _preparingTransfer = false;
+
+  @override
+  Future<RewardsTransferReview> prepareRewardsTransfer({
+    required String publicAccount,
+    required String amount,
+  }) async {
+    if (_authorizingAccess) throw _accessBusy();
+    final int accessRevision = _access.revision;
+    if (_preparingTransfer) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsTransferPreparationUnavailable,
+        safeMessage:
+            'A transfer is already being prepared. Wait and try again.',
+        canRetry: true,
+      );
+    }
+    _preparingTransfer = true;
+    _authorization.invalidate();
+    _preparedTransfer = null;
+    try {
+      final BigInt units;
+      try {
+        units = RewardsAmount.parse(amount.trim());
+        if (units == BigInt.zero) throw const FormatException('Zero amount.');
+      } catch (_) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.invalidRewardsAmount,
+          safeMessage:
+              'Enter a positive Rewards amount with at most seven decimal places.',
+          canRetry: false,
+        );
+      }
+      final DateTime started = _clock.nowUtc();
+      final ActiveRewardsRecord identity = await _requireActiveRewards();
+      final saved = await getRewardsTransferStatus();
+      if (saved?.state == RewardsTransferState.uncertain) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsTransferPending,
+          safeMessage: 'Verify the previous transfer before preparing another.',
+          canRetry: true,
+        );
+      }
+      final ProviderConfiguration? configuration = await _configurationStore
+          .readActive();
+      if (configuration == null ||
+          configuration.environment != identity.environment) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsIdentityUnavailable,
+          safeMessage:
+              'Your Rewards service settings need attention from App Master.',
+          canRetry: true,
+        );
+      }
+      final List<Object> reads = await Future.wait<Object>(<Future<Object>>[
+        inspectRewardsRecipient(publicAccount),
+        _rewardsTransferClient.load(
+          configuration: configuration,
+          identity: identity,
+        ),
+      ]).timeout(const Duration(seconds: 15));
+      final RewardsRecipientView recipient = reads[0] as RewardsRecipientView;
+      final RewardsTransferCost cost = reads[1] as RewardsTransferCost;
+      final RewardsLedgerBalance balance = cost.rewardsBalance;
+      if (units > RewardsAmount.parse(balance.available)) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.insufficientRewardsFunds,
+          safeMessage: 'The amount exceeds your available Rewards.',
+          canRetry: false,
+        );
+      }
+      if (units > RewardsAmount.parse(recipient.receivingCapacity)) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.invalidRewardsAmount,
+          safeMessage: 'The amount exceeds the recipient’s receiving capacity.',
+          canRetry: false,
+        );
+      }
+      if (cost.feeStroops <= 0 ||
+          cost.feeStroops > 0xffffffff ||
+          cost.nativeSpendable < BigInt.from(cost.feeStroops)) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.insufficientRewardsFeeFunds,
+          safeMessage:
+              'Your account needs more native fee funds before sending Rewards.',
+          canRetry: false,
+        );
+      }
+      if ((await _requireActiveRewards()).encode() != identity.encode() ||
+          (await _configurationStore.readActive())?.encodeProtected() !=
+              configuration.encodeProtected()) {
+        throw const FormatException('Preparation settings changed.');
+      }
+      final DateTime expires = started.add(const Duration(minutes: 2));
+      if (!_clock.nowUtc().isBefore(expires) ||
+          accessRevision != _access.revision) {
+        throw const FormatException('Preparation expired.');
+      }
+      final RewardsTransferReview review = RewardsTransferReview(
+        reviewId: 'SEND-${_tokenGenerator.createToken(24)}',
+        publicAccount: recipient.publicAccount,
+        environment: identity.environment,
+        assetCode: identity.assetCode,
+        assetIssuer: identity.assetIssuer,
+        amount: RewardsAmount.display(units),
+        maximumFee: RewardsAmount.display(BigInt.from(cost.feeStroops)),
+        expiresAt: expires,
+      );
+      _preparedTransfer = _PreparedTransfer(
+        review: review,
+        identity: identity,
+        configuration: configuration,
+        cost: cost,
+      );
+      return review;
+    } on WalletSdkException {
+      rethrow;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsTransferPreparationUnavailable,
+        safeMessage:
+            'We could not prepare this transfer. Refresh the details and try again.',
+        canRetry: true,
+      );
+    } finally {
+      _preparingTransfer = false;
+    }
+  }
+
+  @override
+  Future<RewardsTransferReview> getPreparedRewardsTransfer(
+    String reviewId,
+  ) async {
+    final _PreparedTransfer? prepared = _preparedTransfer;
+    try {
+      if (prepared == null ||
+          prepared.review.reviewId != reviewId ||
+          !_clock.nowUtc().isBefore(prepared.review.expiresAt) ||
+          (await _requireActiveRewards()).encode() !=
+              prepared.identity.encode() ||
+          (await _configurationStore.readActive())?.encodeProtected() !=
+              prepared.configuration.encodeProtected() ||
+          !identical(_preparedTransfer, prepared)) {
+        throw const FormatException('Review unavailable.');
+      }
+      return prepared.review;
+    } catch (_) {
+      _authorization.invalidate();
+      if (identical(_preparedTransfer, prepared)) _preparedTransfer = null;
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.invalidRewardsTransferReview,
+        safeMessage:
+            'This transfer review is no longer valid. Prepare it again.',
+        canRetry: false,
+      );
+    }
+  }
+
+  @override
+  Future<RewardsTransferAuthorization> authorizeRewardsTransfer(
+    String reviewId,
+  ) async {
+    if (_authorizingAccess || _access.isBusy) throw _accessBusy();
+    final RewardsTransferReview review = await getPreparedRewardsTransfer(
+      reviewId,
+    );
+    final _PreparedTransfer? prepared = _preparedTransfer;
+    if (prepared == null || !identical(prepared.review, review)) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.invalidRewardsTransferReview,
+        safeMessage: 'Prepare and review the transfer again.',
+        canRetry: false,
+      );
+    }
+    final result = await _authorization.authorize(
+      review,
+      () => _revalidateTransfer(prepared),
+    );
+    _access.acceptTransferAuthentication();
+    return result;
+  }
+
+  Future<void> _revalidateTransfer(_PreparedTransfer prepared) async {
+    await getPreparedRewardsTransfer(prepared.review.reviewId);
+    final List<Object> reads = await Future.wait<Object>(<Future<Object>>[
+      inspectRewardsRecipient(prepared.review.publicAccount),
+      _rewardsTransferClient.load(
+        configuration: prepared.configuration,
+        identity: prepared.identity,
+      ),
+    ]).timeout(const Duration(seconds: 15));
+    final RewardsRecipientView recipient = reads[0] as RewardsRecipientView;
+    final RewardsTransferCost cost = reads[1] as RewardsTransferCost;
+    final BigInt amount = RewardsAmount.parse(prepared.review.amount);
+    if (cost.sequence != prepared.cost.sequence ||
+        cost.feeStroops > prepared.cost.feeStroops ||
+        cost.nativeSpendable < BigInt.from(prepared.cost.feeStroops) ||
+        amount > RewardsAmount.parse(cost.rewardsBalance.available) ||
+        amount > RewardsAmount.parse(recipient.receivingCapacity)) {
+      _preparedTransfer = null;
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.invalidRewardsTransferReview,
+        safeMessage:
+            'Transfer details changed. Prepare and review the transfer again.',
+        canRetry: false,
+      );
+    }
+    await getPreparedRewardsTransfer(prepared.review.reviewId);
+  }
+
+  @override
+  Future<void> cancelRewardsTransferAuthorization() async {
+    _preparedTransfer = null;
+    await _authorization.cancel();
+  }
+
+  @override
+  Future<RewardsRecipientView> inspectRewardsRecipient(
+    String publicAccount,
+  ) async {
+    final account = publicAccount.trim();
+    try {
+      const StrKeyCodec().decodeEd25519PublicKey(account);
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.invalidRewardsRecipient,
+        safeMessage: 'Enter a valid public receiving account address.',
+        canRetry: false,
+      );
+    }
+    final identity = await _requireActiveRewards();
+    if (account == identity.accountId) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.invalidRewardsRecipient,
+        safeMessage: 'Choose a receiving account other than your own.',
+        canRetry: false,
+      );
+    }
+    try {
+      final configuration = await _configurationStore.readActive();
+      if (configuration == null ||
+          configuration.environment != identity.environment) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsIdentityUnavailable,
+          safeMessage:
+              'Your Rewards service settings need attention from App Master.',
+          canRetry: true,
+        );
+      }
+      final capacity = await _rewardsRecipientClient.inspect(
+        configuration: configuration,
+        identity: identity,
+        account: account,
+      );
+      final currentConfiguration = await _configurationStore.readActive();
+      if ((await _requireActiveRewards()).encode() != identity.encode() ||
+          currentConfiguration?.endpoint != configuration.endpoint ||
+          currentConfiguration?.version != configuration.version ||
+          currentConfiguration?.environment != configuration.environment ||
+          currentConfiguration?.apiKey != configuration.apiKey) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsRecipientUnavailable,
+          safeMessage:
+              'Your Rewards settings changed. Check the recipient again.',
+          canRetry: true,
+        );
+      }
+      return RewardsRecipientView(
+        publicAccount: account,
+        environment: identity.environment,
+        assetCode: identity.assetCode,
+        receivingCapacity: capacity,
+        observedAt: _clock.nowUtc(),
+      );
+    } on WalletSdkException {
+      rethrow;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsRecipientUnavailable,
+        safeMessage:
+            'We could not check this recipient. Check your connection and try again.',
+        canRetry: true,
+      );
+    }
+  }
+
+  final RewardsHistoryClient _rewardsHistoryClient;
+
+  @override
+  Future<RewardsHistoryPage> getRewardsHistory({
+    String? cursor,
+    int limit = 20,
+  }) async {
+    if (limit < 1 || limit > 50) {
+      throw ArgumentError.value(limit, 'limit');
+    }
+    final ActiveRewardsRecord identity = await _requireActiveRewards();
+    try {
+      final ProviderConfiguration? configuration = await _configurationStore
+          .readActive();
+      if (configuration == null ||
+          configuration.environment != identity.environment) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsIdentityUnavailable,
+          safeMessage:
+              'Your Rewards service settings need attention from App Master.',
+          canRetry: true,
+        );
+      }
+      final RewardsLedgerHistoryPage page = await _rewardsHistoryClient.load(
+        configuration: configuration,
+        identity: identity,
+        cursor: cursor,
+        limit: limit,
+      );
+      if ((await _requireActiveRewards()).encode() != identity.encode()) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsIdentityUnavailable,
+          safeMessage: 'Your Rewards details changed. Refresh history.',
+          canRetry: true,
+        );
+      }
+      return RewardsHistoryPage(
+        publicAccount: identity.accountId,
+        environment: identity.environment,
+        assetCode: identity.assetCode,
+        items: page.items,
+        nextCursor: page.nextCursor,
+        observedAt: _clock.nowUtc(),
+      );
+    } on WalletSdkException {
+      rethrow;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsHistoryUnavailable,
+        safeMessage:
+            'We could not load Rewards history. Check your connection and try again.',
+        canRetry: true,
+      );
+    }
+  }
+
+  Future<ActiveRewardsRecord>? _activeMigration;
+
+  Future<ActiveRewardsRecord> _migrateActiveRewards() async {
+    if (_activeMigration != null) return _activeMigration!;
+    final Future<ActiveRewardsRecord> migration = ActiveRewardsMigrationService(
+      activeStore: _activeRewardsStore,
+      activationStore: _activationStore,
+      inspectionStore: _activationInspectionStore,
+      submissionStore: _activationSubmissionStore,
+      configurationStore: _configurationStore,
+      credentialStore: _credentialStore,
+      deviceIdentity: _deviceIdentityService,
+      responseService: _activationResponseService,
+      qrCodec: _qrCodec,
+      protocol: _stellarProtocol,
+      reconciliationClient: _activationReconciliationClient,
+      clock: _clock,
+    ).migrate();
+    _activeMigration = migration;
+    try {
+      return await migration;
+    } finally {
+      _activeMigration = null;
+    }
+  }
+
+  Future<ActiveRewardsRecord> _requireActiveRewards() async {
+    await _access.requireAvailable();
+    try {
+      final ActivationSubmissionRecord? submission =
+          await _activationSubmissionStore.read();
+      ActiveRewardsRecord? active = await _activeRewardsStore.read();
+      if (active == null &&
+          submission?.status == ActivationSubmissionStatus.verified) {
+        active = await _migrateActiveRewards();
+      }
+      if (submission == null ||
+          active == null ||
+          submission.status != ActivationSubmissionStatus.verified ||
+          submission.transactionHash != active.activationTransactionHash ||
+          submission.responseId != active.responseId) {
+        throw const FormatException('Active identity unavailable.');
+      }
+      active.validate();
+      await _access.requireAvailable();
+      return active;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsIdentityUnavailable,
+        safeMessage:
+            'Your Rewards details are unavailable. Contact App Master for help.',
+        canRetry: true,
+      );
+    }
+  }
+
+  @override
+  Future<RewardsBalanceView> getRewardsBalance() async {
+    final ActiveRewardsRecord identity = await _requireActiveRewards();
+    try {
+      final ProviderConfiguration? configuration = await _configurationStore
+          .readActive();
+      if (configuration == null ||
+          configuration.environment != identity.environment) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsIdentityUnavailable,
+          safeMessage:
+              'Your Rewards service settings need attention from App Master.',
+          canRetry: true,
+        );
+      }
+      final RewardsLedgerBalance balance = await _rewardsBalanceClient.load(
+        configuration: configuration,
+        identity: identity,
+      );
+      final ActiveRewardsRecord current = await _requireActiveRewards();
+      if (current.encode() != identity.encode()) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rewardsIdentityUnavailable,
+          safeMessage: 'Your Rewards details changed. Refresh again.',
+          canRetry: true,
+        );
+      }
+      return RewardsBalanceView(
+        publicAccount: identity.accountId,
+        environment: identity.environment,
+        assetCode: identity.assetCode,
+        total: balance.total,
+        available: balance.available,
+        observedAt: _clock.nowUtc(),
+      );
+    } on WalletSdkException {
+      rethrow;
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.rewardsBalanceUnavailable,
+        safeMessage:
+            'We could not refresh your Rewards balance. Check your connection and try again.',
+        canRetry: true,
+      );
+    }
+  }
+
+  @override
+  Future<RewardsReceiveView> getRewardsReceiveIdentity() async {
+    try {
+      final ActiveRewardsRecord active = await _requireActiveRewards();
+      return RewardsReceiveView(
+        publicAccount: active.accountId,
+        qrValue: active.accountId,
+        environment: active.environment,
+        assetCode: active.assetCode,
+      );
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.unavailable,
+        safeMessage:
+            'Your Rewards receiving details are unavailable. Contact App Master for help.',
+        canRetry: true,
+      );
+    }
+  }
+
   final ActivationStore _activationStore;
+  final ActiveRewardsStore _activeRewardsStore;
   final CredentialStore _credentialStore;
   final WalletClock _clock;
   final ActivationTokenGenerator _tokenGenerator;
@@ -131,6 +1142,14 @@ final class DefaultWalletSdk implements WalletSdk {
 
   @override
   Future<ActivationRequestView> startActivation(BuilderIdentity builder) async {
+    if (_authorizingAccess) throw _accessBusy();
+    await _access.requireAvailable();
+    final existingSubmission = await _activationSubmissionStore.read();
+    if (await _activeRewardsStore.read() != null ||
+        (existingSubmission != null &&
+            existingSubmission.status != ActivationSubmissionStatus.rejected)) {
+      throw _accessBusy();
+    }
     final ActivationRequestView? existing = await restoreActivationRequest();
     if (existing != null) {
       return existing;
@@ -253,6 +1272,7 @@ final class DefaultWalletSdk implements WalletSdk {
 
   @override
   Future<void> cancelActivation() async {
+    await _access.requireAvailable();
     try {
       final PendingActivationRecord? stored = await _activationStore.read();
       if (stored == null) {
@@ -457,6 +1477,7 @@ final class DefaultWalletSdk implements WalletSdk {
 
   @override
   Future<ActivationOutcome> approveActivation(String responseId) async {
+    await _access.requireAvailable();
     final ActivationSubmissionRecord? existing =
         await _activationSubmissionStore.read();
     if (existing != null && existing.responseId == responseId) {
@@ -607,6 +1628,19 @@ final class DefaultWalletSdk implements WalletSdk {
           );
       final StellarChangeTrustOperation trust =
           inspected.envelope.operations[1] as StellarChangeTrustOperation;
+      final List<int> expectedHash = await _stellarProtocol.transactionHash(
+        inspected.envelope,
+        inspected.configuration.environment == ProviderEnvironment.test
+            ? StellarActivationProtocol.testNetworkPassphrase
+            : StellarActivationProtocol.publicNetworkPassphrase,
+      );
+      final String expectedHashHex = expectedHash
+          .map((int byte) => byte.toRadixString(16).padLeft(2, '0'))
+          .join();
+      if (record.responseId != inspected.review.responseId ||
+          record.transactionHash != expectedHashHex) {
+        return _toWalletActivationStatus(ActivationSubmissionStatus.uncertain);
+      }
       ActivationReconciliationResult result =
           ActivationReconciliationResult.pending;
       for (int attempt = 0; attempt < 3; attempt++) {
@@ -631,11 +1665,20 @@ final class DefaultWalletSdk implements WalletSdk {
             ActivationSubmissionStatus.uncertain,
           );
         }
-        await _activationSubmissionStore.write(
-          ActivationSubmissionRecord(
+        await ActivationFinalizationService(
+          activeStore: _activeRewardsStore,
+          submissionStore: _activationSubmissionStore,
+          credentialStore: _credentialStore,
+        ).finalize(
+          ActiveRewardsRecord(
+            accountId: request.activationAddress,
+            credentialKey: pending.credentialKey,
+            environment: inspected.configuration.environment,
+            assetCode: trust.asset.code!,
+            assetIssuer: trust.asset.issuer!,
+            activationTransactionHash: record.transactionHash,
             responseId: record.responseId,
-            transactionHash: record.transactionHash,
-            status: ActivationSubmissionStatus.verified,
+            verifiedAt: _clock.nowUtc(),
           ),
         );
         return _toWalletActivationStatus(ActivationSubmissionStatus.verified);
@@ -668,7 +1711,8 @@ final class DefaultWalletSdk implements WalletSdk {
     try {
       final ProviderConfiguration? active = await _configurationStore
           .readActive();
-      if (active == null) {
+      final restored = await _activeRewardsStore.read();
+      if (active == null && restored == null) {
         throw const WalletSdkException(
           code: WalletSdkFailureCode.providerConfigurationRequired,
           safeMessage: 'Activate Rewards before updating service settings.',
@@ -686,8 +1730,8 @@ final class DefaultWalletSdk implements WalletSdk {
         requestId: requestId,
         deviceId: device.deviceId,
         devicePublicKey: device.publicKey,
-        currentVersion: active.version,
-        environment: active.environment,
+        currentVersion: active?.version ?? 0,
+        environment: active?.environment ?? restored!.environment,
         challenge: _tokenGenerator.createToken(24),
         now: now,
       );
@@ -799,7 +1843,8 @@ final class DefaultWalletSdk implements WalletSdk {
           .readRequest();
       final ProviderConfiguration? active = await _configurationStore
           .readActive();
-      if (rawRequest == null || active == null) {
+      final restored = await _activeRewardsStore.read();
+      if (rawRequest == null || (active == null && restored == null)) {
         throw const FormatException('Configuration request is unavailable.');
       }
       final DecodedConfigurationRequest request =
@@ -812,7 +1857,7 @@ final class DefaultWalletSdk implements WalletSdk {
             encoded: qrValue,
             request: request,
             deviceKeyPair: await _deviceIdentityService.readPrivateKeyPair(),
-            installedVersion: active.version,
+            installedVersion: active?.version ?? 0,
             now: _clock.nowUtc(),
           );
       if (await _configurationHandshakeStore.isConsumed(
@@ -983,7 +2028,8 @@ final class DefaultWalletSdk implements WalletSdk {
       accountId: accountId,
     );
     const double baseReserve = 0.5;
-    const double activationFundingPolicy = 2.1;
+    final double activationFundingPolicy =
+        configuration.activationFundingUnits / 10000000;
     final double retainedReserve =
         (2 + status.subentryCount) * baseReserve +
         status.nativeSellingLiabilities +
@@ -993,7 +2039,13 @@ final class DefaultWalletSdk implements WalletSdk {
       0,
       double.infinity,
     );
-    final int capacity = (spendable / activationFundingPolicy).floor();
+    final int fundingCapacity = (spendable / activationFundingPolicy).floor();
+    final int rewardCapacity = status.nonNativeAssets.length == 1
+        ? (status.nonNativeAssets.single.spendable /
+                  (configuration.initialRewardsUnits / 10000000))
+              .floor()
+        : 0;
+    final int capacity = min(fundingCapacity, rewardCapacity);
     final String rewardsAvailable =
         status.nonNativeSpendableBalances.length == 1
         ? _formatRewards(status.nonNativeSpendableBalances.single)
@@ -1054,7 +2106,21 @@ final class DefaultWalletSdk implements WalletSdk {
   @override
   Future<ProviderConfigurationStatus> getProviderConfigurationStatus() async {
     try {
-      return await _configurationStore.readStatus();
+      final status = await _configurationStore.readStatus();
+      final config = await _configurationStore.readActive();
+      return ProviderConfigurationStatus(
+        state: status.state,
+        environment: status.environment,
+        version: status.version,
+        endpointHost: status.endpointHost,
+        lastCheckedAt: status.lastCheckedAt,
+        activationFunding: config == null
+            ? '2.1'
+            : RewardsAmount.display(BigInt.from(config.activationFundingUnits)),
+        initialRewards: config == null
+            ? '1'
+            : RewardsAmount.display(BigInt.from(config.initialRewardsUnits)),
+      );
     } catch (_) {
       return const ProviderConfigurationStatus.notConfigured();
     }
@@ -1069,6 +2135,19 @@ final class DefaultWalletSdk implements WalletSdk {
   }
 
   Future<void> _clearAttempt(String credentialKey) async {
+    await _access.requireAvailable();
+    final active = await _activeRewardsStore.read();
+    final submission = await _activationSubmissionStore.read();
+    if (active?.credentialKey == credentialKey ||
+        (submission != null &&
+            submission.status != ActivationSubmissionStatus.rejected)) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.cancellationFailed,
+        safeMessage:
+            'Preserve this account until its activation is resolved. Contact App Master.',
+        canRetry: false,
+      );
+    }
     await _credentialStore.delete(credentialKey);
     await _activationStore.clear();
   }
@@ -1137,4 +2216,18 @@ final class DefaultWalletSdk implements WalletSdk {
     final String fixed = value.toStringAsFixed(7);
     return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
   }
+}
+
+/// Private exact intent retained only in this SDK instance; never submitted here.
+final class _PreparedTransfer {
+  const _PreparedTransfer({
+    required this.review,
+    required this.identity,
+    required this.configuration,
+    required this.cost,
+  });
+  final RewardsTransferReview review;
+  final ActiveRewardsRecord identity;
+  final ProviderConfiguration configuration;
+  final RewardsTransferCost cost;
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:employee_wellness/wallet_sdk/src/protocol/rewards_amount.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:employee_wellness/wallet_sdk/src/configuration/provider_configuration.dart';
@@ -33,8 +34,6 @@ final class ActivationResponseService {
     : _random = random ?? Random.secure();
 
   static const int maximumEncodedBytes = 4096;
-  static const int _startingNativeAmount = 21000000;
-  static const int _startingRewardsAmount = 10000000;
   static const int _maximumFeePerOperation = 100000;
   static const Duration _responseLifetime = Duration(minutes: 5);
 
@@ -56,7 +55,13 @@ final class ActivationResponseService {
     required String responseId,
   }) async {
     if (ledger.nonNativeAssets.length != 1 ||
-        ledger.nonNativeAssets.single.spendable < 1) {
+        ledger.nonNativeAssets.single.spendable <
+            configuration.initialRewardsUnits / 10000000 ||
+        ledger.nativeBalance -
+                ledger.nativeSellingLiabilities -
+                (2 + ledger.subentryCount) * 0.5 <
+            configuration.activationFundingUnits / 10000000 +
+                max(100, ledger.feeP95Stroops) * 3 / 10000000) {
       throw const WalletSdkException(
         code: WalletSdkFailureCode.activationPolicyUnavailable,
         safeMessage: 'Rewards activation settings need review.',
@@ -90,7 +95,7 @@ final class ActivationResponseService {
       operations: <StellarActivationOperation>[
         StellarCreateAccountOperation(
           destination: request.activationAddress,
-          startingBalance: _startingNativeAmount,
+          startingBalance: configuration.activationFundingUnits,
         ),
         StellarChangeTrustOperation(
           sourceAccount: request.activationAddress,
@@ -100,7 +105,7 @@ final class ActivationResponseService {
         StellarPaymentOperation(
           destination: request.activationAddress,
           asset: rewards,
-          amount: _startingRewardsAmount,
+          amount: configuration.initialRewardsUnits,
         ),
       ],
     );
@@ -282,6 +287,12 @@ final class ActivationResponseService {
           apiKey: configuration.apiKey,
           environment: configuration.environment,
           version: configuration.version,
+          activationFunding: RewardsAmount.display(
+            BigInt.from(configuration.activationFundingUnits),
+          ),
+          initialRewards: RewardsAmount.display(
+            BigInt.from(configuration.initialRewardsUnits),
+          ),
         ),
       );
     } on WalletSdkException {
@@ -292,6 +303,7 @@ final class ActivationResponseService {
     );
     await _validateEnvelope(
       envelope,
+      configuration: configuration,
       appMaster: appMaster,
       builder: activationAddress,
       environment: configuration.environment,
@@ -360,6 +372,7 @@ final class ActivationResponseService {
 
   Future<void> _validateEnvelope(
     StellarActivationEnvelope envelope, {
+    required ProviderConfiguration configuration,
     required String appMaster,
     required String builder,
     required ProviderEnvironment environment,
@@ -382,7 +395,7 @@ final class ActivationResponseService {
     if (first is! StellarCreateAccountOperation ||
         first.sourceAccount != null ||
         first.destination != builder ||
-        first.startingBalance != _startingNativeAmount ||
+        first.startingBalance != configuration.activationFundingUnits ||
         second is! StellarChangeTrustOperation ||
         second.sourceAccount != builder ||
         second.limit != 0x7fffffffffffffff ||
@@ -390,7 +403,7 @@ final class ActivationResponseService {
         third is! StellarPaymentOperation ||
         third.sourceAccount != null ||
         third.destination != builder ||
-        third.amount != _startingRewardsAmount ||
+        third.amount != configuration.initialRewardsUnits ||
         third.asset != second.asset) {
       throw const FormatException('Activation operation policy failed.');
     }

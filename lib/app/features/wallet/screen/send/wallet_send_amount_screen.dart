@@ -1,52 +1,60 @@
 import 'package:flutter/material.dart';
-import 'package:employee_wellness/app/constant/resources/app_colors.dart';
+import 'package:get/get.dart';
 import 'package:employee_wellness/app/core/base/base_view.dart';
 import 'package:employee_wellness/app/features/wallet/controller/wallet_controller.dart';
 import 'package:employee_wellness/app/features/wallet/widget/wallet_ui.dart';
-
-const String _mockRecipient = 'Avery Chen  •  BLD-AC-00831';
 
 class WalletSendAmountScreen extends BaseView<WalletController> {
   const WalletSendAmountScreen({super.key});
   @override
   Widget buildView(BuildContext context) => WalletPage(
     title: 'Send Wellness Points',
-    subtitle: 'Enter a mock amount for the validated recipient.',
+    subtitle: 'Enter an amount to prepare a transfer review.',
     children: <Widget>[
-      WalletCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(child: Icon(Icons.person_outline)),
-              title: Text('Validated recipient'),
-              subtitle: Text(_mockRecipient),
-              trailing: Icon(Icons.verified, color: AppColors.violet),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller.amountController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+      Obx(() {
+        final recipient = controller.rewardsRecipient.value;
+        final busy = controller.isPreparingTransfer.value;
+        return WalletCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (recipient == null)
+                const Text('Check a receiving account first.')
+              else ...<Widget>[
+                const Text('Receiving account'),
+                SelectableText(recipient.publicAccount),
+                TextField(
+                  controller: controller.amountController,
+                  enabled: !busy,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  onChanged: (_) => controller.transferReview.value = null,
+                  decoration: InputDecoration(
+                    labelText: 'Wellness Points amount',
+                    suffixText: recipient.assetCode,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Available Wellness Points, receiving capacity, and native fee funds will be checked before review.',
+                ),
+              ],
+              if (controller.transferError.value.isNotEmpty)
+                Text(controller.transferError.value),
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: busy || recipient == null
+                    ? null
+                    : controller.prepareRewardsTransfer,
+                child: Text(
+                  busy ? 'Preparing transfer…' : 'Prepare transfer review',
+                ),
               ),
-              decoration: const InputDecoration(
-                labelText: 'Wellness Points amount',
-                hintText: '25',
-                suffixText: 'pts',
-                prefixIcon: Icon(Icons.card_giftcard_outlined),
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text('Available preview balance: 1,250 pts'),
-            const SizedBox(height: 18),
-            FilledButton(
-              onPressed: controller.reviewMockAmount,
-              child: const Text('Continue to review'),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      }),
     ],
   );
 }

@@ -1,8 +1,20 @@
 library;
 
-import 'package:employee_wellness/wallet_sdk/src/default_wallet_sdk.dart';
+export 'rewards_recovery_page.dart' show RewardsRecoveryPage;
 
-WalletSdk createWalletSdk() => DefaultWalletSdk();
+export 'app_master_roster.dart';
+import 'app_master_roster.dart';
+
+import 'package:employee_wellness/wallet_sdk/src/default_wallet_sdk.dart';
+import 'package:employee_wellness/wallet_sdk/src/authorization/transfer_authorization_service.dart';
+
+WalletSdk createWalletSdk({
+  String Function(String)? authenticationMessageMapper,
+}) => DefaultWalletSdk(
+  transferAuthenticator: NativeTransferAuthenticator(
+    messageMapper: authenticationMessageMapper,
+  ),
+);
 
 final class BuilderIdentity {
   const BuilderIdentity({required this.displayName, required this.phone});
@@ -98,6 +110,8 @@ final class WalletActivationStatus {
 
 enum ProviderEnvironment { test, production }
 
+enum RewardsAccessState { locked, unlocked, removed }
+
 enum ProviderConfigurationState { notConfigured, pendingVerification, ready }
 
 enum DistributorAuthorityState { notConfigured, ready }
@@ -142,12 +156,16 @@ final class ProviderConfigurationInput {
     required this.apiKey,
     required this.environment,
     required this.version,
+    this.activationFunding = '2.1',
+    this.initialRewards = '1',
   });
 
   final String endpoint;
   final String apiKey;
   final ProviderEnvironment environment;
   final int version;
+  final String activationFunding;
+  final String initialRewards;
 }
 
 final class ProviderConfigurationOutcome {
@@ -225,6 +243,8 @@ final class ProviderConfigurationStatus {
     this.version,
     this.endpointHost,
     this.lastCheckedAt,
+    this.activationFunding = '2.1',
+    this.initialRewards = '1',
   });
 
   const ProviderConfigurationStatus.notConfigured()
@@ -232,16 +252,40 @@ final class ProviderConfigurationStatus {
       environment = null,
       version = null,
       endpointHost = null,
-      lastCheckedAt = null;
+      lastCheckedAt = null,
+      activationFunding = '2.1',
+      initialRewards = '1';
 
   final ProviderConfigurationState state;
   final ProviderEnvironment? environment;
   final int? version;
   final String? endpointHost;
   final DateTime? lastCheckedAt;
+  final String activationFunding;
+  final String initialRewards;
 }
 
 enum WalletSdkFailureCode {
+  rosterNotConfigured,
+  rosterAccessDenied,
+  rosterUnavailable,
+  rewardsAccessRemoved,
+  rewardsAccessUnavailable,
+  rewardsSendUnavailable,
+  rewardsTransferPending,
+  rewardsAuthorizationUnavailable,
+  rewardsAuthorizationDenied,
+  invalidRewardsTransferReview,
+  invalidRewardsAmount,
+  insufficientRewardsFunds,
+  insufficientRewardsFeeFunds,
+  rewardsTransferPreparationUnavailable,
+  invalidRewardsRecipient,
+  rewardsRecipientUnavailable,
+  rewardsIdentityUnavailable,
+  rewardsBalanceUnavailable,
+  rewardsHistoryUnavailable,
+  invalidRewardsHistoryCursor,
   invalidBuilder,
   secureSetupFailed,
   requestCreationFailed,
@@ -286,6 +330,41 @@ final class WalletSdkException implements Exception {
 }
 
 abstract interface class WalletSdk {
+  Future<AppMasterRosterPage> getAppMasterRoster({
+    String? cursor,
+    int limit = 20,
+  });
+  Future<RewardsAccessState> getRewardsAccessState();
+  Future<void> lockRewards();
+  Future<void> unlockRewards();
+  Future<void> removeRewardsAccess();
+  Future<String> createRewardsBackup(String password);
+  Future<void> confirmRewardsBackup(String backup, String password);
+  Future<void> restoreRewardsBackup(String backup, String password);
+  Future<void> eraseRewardsFromDevice();
+  Future<RewardsTransferOutcome?> resolvePendingRewardsTransfer({
+    String? competingTransactionHash,
+  });
+  Future<RewardsTransferOutcome> approveRewardsTransfer(String reviewId);
+  Future<RewardsTransferOutcome?> getRewardsTransferStatus({
+    bool reconcile = false,
+  });
+  Future<RewardsTransferAuthorization> authorizeRewardsTransfer(
+    String reviewId,
+  );
+  Future<void> cancelRewardsTransferAuthorization();
+  Future<RewardsTransferReview> getPreparedRewardsTransfer(String reviewId);
+  Future<RewardsTransferReview> prepareRewardsTransfer({
+    required String publicAccount,
+    required String amount,
+  });
+  Future<RewardsRecipientView> inspectRewardsRecipient(String publicAccount);
+  Future<RewardsHistoryPage> getRewardsHistory({
+    String? cursor,
+    int limit = 20,
+  });
+  Future<RewardsBalanceView> getRewardsBalance();
+  Future<RewardsReceiveView> getRewardsReceiveIdentity();
   Future<ActivationRequestView> startActivation(BuilderIdentity builder);
 
   Future<ActivationRequestView?> restoreActivationRequest();
@@ -331,4 +410,137 @@ abstract interface class WalletSdk {
   );
 
   Future<ProviderConfigurationStatus> getProviderConfigurationStatus();
+}
+
+/// Informational only; this object cannot be used as signing evidence.
+enum RewardsTransferState { confirmed, failed, cancelled, uncertain }
+
+final class RewardsTransferOutcome {
+  const RewardsTransferOutcome({
+    required this.reviewId,
+    required this.transactionHash,
+    required this.publicAccount,
+    required this.assetCode,
+    required this.amount,
+    required this.state,
+    this.resolution,
+  });
+  final String reviewId, transactionHash, publicAccount, assetCode, amount;
+  final RewardsTransferState state;
+  final String? resolution;
+}
+
+/// Informational only; this object cannot be used as signing evidence.
+final class RewardsTransferAuthorization {
+  const RewardsTransferAuthorization({
+    required this.reviewId,
+    required this.expiresAt,
+  });
+  final String reviewId;
+  final DateTime expiresAt;
+}
+
+/// An immutable preparation. It does not sign, authorize, or submit a payment.
+final class RewardsTransferReview {
+  const RewardsTransferReview({
+    required this.reviewId,
+    required this.publicAccount,
+    required this.environment,
+    required this.assetCode,
+    required this.assetIssuer,
+    required this.amount,
+    required this.maximumFee,
+    required this.expiresAt,
+  });
+  final String reviewId;
+  final String publicAccount;
+  final ProviderEnvironment environment;
+  final String assetCode;
+  final String assetIssuer;
+  final String amount;
+
+  /// Maximum native XLM fee bid for a single direct payment operation.
+  final String maximumFee;
+  final DateTime expiresAt;
+}
+
+/// A read-only observation, not authorization or a prepared transaction.
+final class RewardsRecipientView {
+  const RewardsRecipientView({
+    required this.publicAccount,
+    required this.environment,
+    required this.assetCode,
+    required this.receivingCapacity,
+    required this.observedAt,
+  });
+  final String publicAccount;
+  final ProviderEnvironment environment;
+  final String assetCode;
+  final String receivingCapacity;
+  final DateTime observedAt;
+}
+
+final class RewardsReceiveView {
+  const RewardsReceiveView({
+    required this.publicAccount,
+    required this.qrValue,
+    required this.environment,
+    required this.assetCode,
+  });
+
+  final String publicAccount;
+  final String qrValue;
+  final ProviderEnvironment environment;
+  final String assetCode;
+}
+
+final class RewardsBalanceView {
+  const RewardsBalanceView({
+    required this.publicAccount,
+    required this.environment,
+    required this.assetCode,
+    required this.total,
+    required this.available,
+    required this.observedAt,
+  });
+  final String publicAccount;
+  final ProviderEnvironment environment;
+  final String assetCode;
+  final String total;
+  final String available;
+  final DateTime observedAt;
+}
+
+enum RewardsHistoryDirection { received, sent, self }
+
+final class RewardsHistoryItem {
+  const RewardsHistoryItem({
+    required this.id,
+    required this.direction,
+    required this.amount,
+    required this.counterparty,
+    required this.createdAt,
+  });
+  final String id;
+  final RewardsHistoryDirection direction;
+  final String amount;
+  final String counterparty;
+  final DateTime createdAt;
+}
+
+final class RewardsHistoryPage {
+  RewardsHistoryPage({
+    required this.publicAccount,
+    required this.environment,
+    required this.assetCode,
+    required List<RewardsHistoryItem> items,
+    required this.observedAt,
+    this.nextCursor,
+  }) : items = List<RewardsHistoryItem>.unmodifiable(items);
+  final String publicAccount;
+  final ProviderEnvironment environment;
+  final String assetCode;
+  final List<RewardsHistoryItem> items;
+  final DateTime observedAt;
+  final String? nextCursor;
 }

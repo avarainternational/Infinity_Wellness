@@ -1,7 +1,7 @@
 # Project Overview
 
-Infinity Wellness is an employee wellness mobile app skeleton. An employee can begin Employee Wallet activation and, after an administrator prepares a response, review and complete setup for Wellness Points. Wellness Admin provides the activation package and protected service configuration experience.
+Infinity Wellness is an employee wellness mobile app with a protected Wallet SDK. An employee can activate an Employee Wallet, view and receive Wellness Points, review and send transfers with device authentication, inspect confirmed activity, update protected service settings, and create an encrypted user-held backup. Wellness Admin provides activation, points policy, public asset-holder, and protected service configuration flows.
 
 Employee-facing language is **Employee**, **Wellness Points**, and **Employee Wallet**. SDK methods and protocol fields retain their source Builder/distributor names to preserve the public API and stored-data compatibility. The source Infinity App's Supabase, mini-app, and live-data features are outside this project.
 
-Wallet overview, receive, send, history, and security screens are presentation prototypes. No real Wellness Points transfer or balance service is claimed by those screens. Privacy, authorization, and custody require further product and security review before production use.
+Wallet operations use the configured Stellar Horizon service through the private SDK. Wellness Admin's asset-holder list exposes public ledger accounts and balances; it is not an employee directory. Role authorization, physical-device verification, release operations, and independent security review remain required before production use.

@@ -1,4 +1,8 @@
 export 'activation/wallet_activation_screens.dart';
+export 'wallet_configuration_outcome_screen.dart';
+export 'wallet_configuration_request_screen.dart';
+export 'wallet_configuration_review_screen.dart';
+export 'wallet_configuration_scan_screen.dart';
 export 'history/wallet_history_screen.dart';
 export 'overview/wallet_overview_screen.dart';
 export 'receive/wallet_receive_screen.dart';

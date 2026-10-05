@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
+import 'package:employee_wellness/wallet_sdk/src/transport/horizon_http_client.dart';
 import 'package:employee_wellness/wallet_sdk/src/configuration/provider_configuration.dart';
 import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
 
@@ -15,6 +13,7 @@ abstract interface class HorizonHealthClient {
 final class DirectHorizonHealthClient implements HorizonHealthClient {
   DirectHorizonHealthClient({
     http.Client? client,
+    HorizonHttpClient? transport,
     this.connectTimeout = const Duration(seconds: 5),
     this.readTimeout = const Duration(seconds: 5),
     this.totalTimeout = const Duration(seconds: 10),
@@ -25,7 +24,12 @@ final class DirectHorizonHealthClient implements HorizonHealthClient {
     Future<void> Function(Duration duration)? delay,
   }) : assert(maximumAttempts > 0),
        assert(maximumResponseBytes > 0),
-       _client = client ?? _createDefaultClient(),
+       _transport = HorizonHttpClient.resolve(
+         client: client,
+         transport: transport,
+         connectTimeout: connectTimeout,
+         readTimeout: readTimeout,
+       ),
        _random = random ?? Random.secure(),
        _delay = delay ?? _defaultDelay;
 
@@ -34,7 +38,7 @@ final class DirectHorizonHealthClient implements HorizonHealthClient {
   static const String _publicNetworkPassphrase =
       'Public Global Stellar Network ; September 2015';
 
-  final http.Client _client;
+  final HorizonHttpClient _transport;
   final Duration connectTimeout;
   final Duration readTimeout;
   final Duration totalTimeout;
@@ -46,12 +50,6 @@ final class DirectHorizonHealthClient implements HorizonHealthClient {
 
   static Future<void> _defaultDelay(Duration duration) =>
       Future<void>.delayed(duration);
-
-  static http.Client _createDefaultClient() {
-    final HttpClient client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 5);
-    return IOClient(client);
-  }
 
   @override
   Future<void> check(ProviderConfiguration configuration) async {
@@ -89,17 +87,17 @@ final class DirectHorizonHealthClient implements HorizonHealthClient {
 
   Future<void> _checkOnce(ProviderConfiguration configuration) async {
     try {
-      final _HealthResponse response = await _request(configuration);
+      final HorizonHttpResult response = await _transport.request(
+        configuration: configuration,
+        maximumResponseBytes: maximumResponseBytes,
+      );
       _validateStatus(response.statusCode);
       final String? contentType = response.headers['content-type'];
       if (!_isJsonMediaType(contentType)) {
         throw _invalidResponse();
       }
 
-      final Object? decoded = jsonDecode(utf8.decode(response.bytes));
-      if (decoded is! Map<String, dynamic>) {
-        throw _invalidResponse();
-      }
+      final Map<String, dynamic> decoded = response.decodeJson();
       final Object? networkPassphrase = decoded['network_passphrase'];
       final Object? horizonVersion = decoded['horizon_version'];
       if (networkPassphrase is! String ||
@@ -130,16 +128,17 @@ final class DirectHorizonHealthClient implements HorizonHealthClient {
       );
     } on FormatException {
       throw _invalidResponse();
-    } on http.ClientException {
-      throw const WalletSdkException(
-        code: WalletSdkFailureCode.providerServiceUnavailable,
-        safeMessage: 'The activation service is unavailable. Try again.',
-        canRetry: true,
-      );
-    } on SocketException {
-      throw const WalletSdkException(
-        code: WalletSdkFailureCode.providerServiceUnavailable,
-        safeMessage: 'The activation service is unavailable. Try again.',
+    } on HorizonHttpException catch (error) {
+      if (error.failure == HorizonHttpFailure.responseTooLarge) {
+        throw _invalidResponse();
+      }
+      throw WalletSdkException(
+        code: error.failure == HorizonHttpFailure.timeout
+            ? WalletSdkFailureCode.providerTimeout
+            : WalletSdkFailureCode.providerServiceUnavailable,
+        safeMessage: error.failure == HorizonHttpFailure.timeout
+            ? 'The service check timed out. Try again.'
+            : 'The activation service is unavailable. Try again.',
         canRetry: true,
       );
     }
@@ -156,29 +155,6 @@ final class DirectHorizonHealthClient implements HorizonHealthClient {
     }
     final String mediaType = contentType.split(';').first.trim().toLowerCase();
     return mediaType == 'application/json' || mediaType.endsWith('+json');
-  }
-
-  Future<_HealthResponse> _request(ProviderConfiguration configuration) async {
-    final http.Request request = http.Request('GET', configuration.endpoint)
-      ..headers.addAll(<String, String>{
-        'accept': 'application/json',
-        'api-key': configuration.apiKey,
-      });
-    final http.StreamedResponse response = await _client
-        .send(request)
-        .timeout(connectTimeout);
-    final List<int> bytes = <int>[];
-    await for (final List<int> chunk in response.stream.timeout(readTimeout)) {
-      if (bytes.length + chunk.length > maximumResponseBytes) {
-        throw _invalidResponse();
-      }
-      bytes.addAll(chunk);
-    }
-    return _HealthResponse(
-      statusCode: response.statusCode,
-      headers: response.headers,
-      bytes: bytes,
-    );
   }
 
   void _validateStatus(int statusCode) {
@@ -211,16 +187,4 @@ final class DirectHorizonHealthClient implements HorizonHealthClient {
     safeMessage: 'The activation service returned an invalid response.',
     canRetry: true,
   );
-}
-
-final class _HealthResponse {
-  const _HealthResponse({
-    required this.statusCode,
-    required this.headers,
-    required this.bytes,
-  });
-
-  final int statusCode;
-  final Map<String, String> headers;
-  final List<int> bytes;
 }

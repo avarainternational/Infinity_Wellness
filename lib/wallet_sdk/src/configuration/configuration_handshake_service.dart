@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:employee_wellness/wallet_sdk/src/protocol/rewards_amount.dart';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:employee_wellness/wallet_sdk/src/configuration/configuration_policy.dart';
@@ -128,7 +129,7 @@ final class ConfigurationHandshakeService {
         expires.difference(created) > lifetime ||
         !now.isBefore(expires) ||
         currentVersion is! int ||
-        currentVersion < 1 ||
+        currentVersion < 0 ||
         _decode(deviceId).length != 16 ||
         _decode(deviceKey).length != 32) {
       throw const FormatException('Invalid configuration request binding.');
@@ -279,6 +280,12 @@ final class ConfigurationHandshakeService {
         apiKey: configuration.apiKey,
         environment: configuration.environment,
         version: configuration.version,
+        activationFunding: RewardsAmount.display(
+          BigInt.from(configuration.activationFundingUnits),
+        ),
+        initialRewards: RewardsAmount.display(
+          BigInt.from(configuration.initialRewardsUnits),
+        ),
       ),
     );
     return InspectedConfigurationUpdate(

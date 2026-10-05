@@ -134,7 +134,7 @@ class WalletActivationRequestScreen extends BaseView<WalletController> {
       const WalletBoundaryNotice(
         icon: Icons.science_outlined,
         text:
-            'QR scanning and image import are previews and do not activate Wellness Points yet.',
+            'Scan or import the response from Wellness Admin, then review and approve activation on this device.',
       ),
     ],
   );

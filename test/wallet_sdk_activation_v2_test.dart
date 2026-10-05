@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:employee_wellness/wallet_sdk/src/default_wallet_sdk.dart';
 import 'package:employee_wellness/wallet_sdk/src/crypto/strkey_codec.dart';
 import 'package:employee_wellness/wallet_sdk/src/qr/activation_qr_codec.dart';
@@ -10,6 +12,11 @@ import 'package:employee_wellness/wallet_sdk/src/storage/credential_store.dart';
 import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    FlutterSecureStorage.setMockInitialValues(<String, String>{});
+  });
   final DateTime now = DateTime.utc(2026, 9, 19, 10);
 
   test('v2 canonical encoding is deterministic and validates', () async {

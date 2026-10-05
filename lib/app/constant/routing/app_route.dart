@@ -12,6 +12,12 @@ class Routes {
   static const walletSendReview = '/wallet/send/review';
   static const walletSendOutcome = '/wallet/send/outcome';
   static const walletHistory = '/wallet/history';
+  static const walletConfigurationRequest = '/wallet/settings/configuration';
+  static const walletConfigurationScan = '/wallet/settings/configuration/scan';
+  static const walletConfigurationReview =
+      '/wallet/settings/configuration/review';
+  static const walletConfigurationOutcome =
+      '/wallet/settings/configuration/outcome';
   static const walletLocked = '/wallet/locked';
   static const walletAuthentication = '/wallet/authentication';
   static const walletRemove = '/wallet/remove';
@@ -20,4 +26,8 @@ class Routes {
   static const appMasterActivationScan = '/app-master/activation/scan';
   static const appMasterActivationReview = '/app-master/activation/review';
   static const appMasterActivationQr = '/app-master/activation/qr';
+  static const appMasterConfigurationScan = '/app-master/configuration/scan';
+  static const appMasterConfigurationReview =
+      '/app-master/configuration/review';
+  static const appMasterConfigurationQr = '/app-master/configuration/qr';
 }

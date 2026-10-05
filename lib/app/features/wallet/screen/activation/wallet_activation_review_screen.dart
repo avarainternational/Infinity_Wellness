@@ -40,10 +40,7 @@ class WalletActivationReviewScreen extends BaseView<WalletController> {
                   value: employeeFacingText(review.preparedBy),
                 ),
                 for (final String step in review.setupSteps)
-                  WalletReviewRow(
-                    label: 'Setup',
-                    value: employeeFacingText(step),
-                  ),
+                  WalletReviewRow(label: 'Setup', value: step),
               ],
             ),
           ),

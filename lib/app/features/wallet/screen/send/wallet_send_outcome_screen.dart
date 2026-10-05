@@ -1,75 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:employee_wellness/app/constant/resources/app_colors.dart';
 import 'package:employee_wellness/app/core/base/base_view.dart';
 import 'package:employee_wellness/app/features/wallet/controller/wallet_controller.dart';
 import 'package:employee_wellness/app/features/wallet/widget/wallet_ui.dart';
+import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
 
 class WalletSendOutcomeScreen extends BaseView<WalletController> {
   const WalletSendOutcomeScreen({super.key});
   @override
   Widget buildView(BuildContext context) => WalletPage(
-    title: 'Send Outcome',
-    subtitle: 'Preview each possible send outcome.',
+    title: 'Transfer Status',
+    subtitle: 'Saved evidence and ledger verification.',
     children: <Widget>[
       Obx(() {
-        final MockSendOutcome outcome = controller.sendOutcome.value;
-        final (IconData, Color, String, String) presentation =
-            switch (outcome) {
-              MockSendOutcome.success => (
-                Icons.check_circle_outline,
-                AppColors.violet,
-                'Wellness Points sent',
-                'The mock transfer completed successfully.',
-              ),
-              MockSendOutcome.rejected => (
-                Icons.error_outline,
-                AppColors.primaryDark,
-                'Send rejected',
-                'The mock transfer was not submitted or accepted.',
-              ),
-              MockSendOutcome.pending => (
-                Icons.schedule_outlined,
-                AppColors.primary,
-                'Outcome pending',
-                'The result is unknown. Do not submit the transfer again.',
-              ),
-            };
+        final outcome = controller.transferOutcome.value;
         return WalletCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Icon(presentation.$1, size: 58, color: presentation.$2),
-              const SizedBox(height: 14),
-              Text(
-                presentation.$3,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge,
+              if (outcome == null)
+                const Text('No saved transfer is available.')
+              else ...<Widget>[
+                Text(switch (outcome.state) {
+                  RewardsTransferState.confirmed =>
+                    'Wellness Points sent — ledger confirmed',
+                  RewardsTransferState.failed =>
+                    outcome.resolution == null
+                        ? 'Transfer failed on the ledger'
+                        : 'Transfer resolved without payment',
+                  RewardsTransferState.cancelled =>
+                    outcome.resolution == null
+                        ? 'Transfer cancelled before submission'
+                        : 'Transfer expired without payment',
+                  RewardsTransferState.uncertain =>
+                    'Transfer outcome is being verified',
+                }, style: Theme.of(context).textTheme.titleLarge),
+                Text('${outcome.amount} ${outcome.assetCode}'),
+                const Text('Receiving account'),
+                SelectableText(outcome.publicAccount),
+                const Text('Transaction hash'),
+                SelectableText(outcome.transactionHash),
+                if (outcome.resolution != null) Text(outcome.resolution!),
+                if (outcome.state == RewardsTransferState.uncertain)
+                  const Text(
+                    'Do not send again. A missing transaction or network error does not establish failure.',
+                  ),
+              ],
+              if (controller.transferStatusError.value.isNotEmpty)
+                Text(controller.transferStatusError.value),
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: controller.isCheckingTransfer.value
+                    ? null
+                    : () => controller.checkRewardsTransfer(reconcile: true),
+                child: Text(
+                  controller.isCheckingTransfer.value
+                      ? 'Checking ledger…'
+                      : 'Check saved transfer',
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(presentation.$4, textAlign: TextAlign.center),
-              const SizedBox(height: 20),
-              SegmentedButton<MockSendOutcome>(
-                segments: const <ButtonSegment<MockSendOutcome>>[
-                  ButtonSegment<MockSendOutcome>(
-                    value: MockSendOutcome.success,
-                    label: Text('Success'),
-                  ),
-                  ButtonSegment<MockSendOutcome>(
-                    value: MockSendOutcome.rejected,
-                    label: Text('Rejected'),
-                  ),
-                  ButtonSegment<MockSendOutcome>(
-                    value: MockSendOutcome.pending,
-                    label: Text('Pending'),
-                  ),
-                ],
-                selected: <MockSendOutcome>{outcome},
-                onSelectionChanged: (Set<MockSendOutcome> values) =>
-                    controller.sendOutcome.value = values.first,
-                showSelectedIcon: false,
-              ),
-              const SizedBox(height: 18),
+              if (outcome?.state == RewardsTransferState.uncertain)
+                _PendingResolution(controller: controller),
               FilledButton(
                 onPressed: controller.openWalletOverview,
                 child: const Text('Return to Wellness Points'),
@@ -78,6 +69,52 @@ class WalletSendOutcomeScreen extends BaseView<WalletController> {
           ),
         );
       }),
+    ],
+  );
+}
+
+class _PendingResolution extends StatefulWidget {
+  const _PendingResolution({required this.controller});
+  final WalletController controller;
+  @override
+  State<_PendingResolution> createState() => _PendingResolutionState();
+}
+
+class _PendingResolutionState extends State<_PendingResolution> {
+  final _reference = TextEditingController();
+  @override
+  void dispose() {
+    _reference.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      OutlinedButton(
+        onPressed: widget.controller.isCheckingTransfer.value
+            ? null
+            : () => widget.controller.resolvePendingTransfer(),
+        child: const Text('Resolve expired transfer'),
+      ),
+      TextField(
+        controller: _reference,
+        maxLength: 64,
+        autocorrect: false,
+        decoration: const InputDecoration(
+          labelText: 'Conflicting transaction reference (optional)',
+          helperText:
+              'Use only a reference supplied by support. The SDK verifies it.',
+        ),
+      ),
+      OutlinedButton(
+        onPressed: widget.controller.isCheckingTransfer.value
+            ? null
+            : () => widget.controller.resolvePendingTransfer(
+                competingHash: _reference.text,
+              ),
+        child: const Text('Verify support reference'),
+      ),
     ],
   );
 }

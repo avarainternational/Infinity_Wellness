@@ -13,7 +13,7 @@ class WalletNotActivatedScreen extends BaseView<WalletController> {
   @override
   Widget buildView(BuildContext context) => WalletPage(
     title: 'Employee Wallet',
-    subtitle: 'Set up Wellness Points on this device.',
+    subtitle: 'Activate Wellness Points on this device.',
     trailing: IconButton.filledTonal(
       onPressed: controller.openAppMaster,
       tooltip: 'Open Wellness Admin',
@@ -40,7 +40,7 @@ class WalletNotActivatedScreen extends BaseView<WalletController> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Employee Wallet is not activated',
+              'Wellness Points are not activated',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),
@@ -72,6 +72,11 @@ class WalletNotActivatedScreen extends BaseView<WalletController> {
         ),
       ),
       const SizedBox(height: 16),
+      OutlinedButton.icon(
+        onPressed: controller.openRewardsRecovery,
+        icon: const Icon(Icons.restore),
+        label: const Text('Restore Wellness Points from backup'),
+      ),
       const WalletPreviewNotice(),
     ],
   );

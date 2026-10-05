@@ -77,11 +77,7 @@ class WalletPreviewNotice extends StatelessWidget {
       children: <Widget>[
         Icon(Icons.science_outlined),
         SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            'UI preview only. Wellness Points activation and transfers are not connected yet.',
-          ),
-        ),
+        Expanded(child: Text('Every send requires device authentication.')),
       ],
     ),
   );

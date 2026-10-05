@@ -1,6 +1,5 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
+import 'package:employee_wellness/wallet_sdk/src/transport/horizon_http_client.dart';
 import 'package:employee_wellness/wallet_sdk/src/configuration/provider_configuration.dart';
 import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
 
@@ -44,10 +43,15 @@ abstract interface class DistributorStatusClient {
 }
 
 final class DirectDistributorStatusClient implements DistributorStatusClient {
-  DirectDistributorStatusClient({http.Client? client})
-    : _client = client ?? http.Client();
+  DirectDistributorStatusClient({
+    http.Client? client,
+    HorizonHttpClient? transport,
+  }) : _transport = HorizonHttpClient.resolve(
+         client: client,
+         transport: transport,
+       );
 
-  final http.Client _client;
+  final HorizonHttpClient _transport;
 
   @override
   Future<DistributorLedgerStatus> load({
@@ -55,25 +59,20 @@ final class DirectDistributorStatusClient implements DistributorStatusClient {
     required String accountId,
   }) async {
     try {
-      final List<http.Response> responses = await Future.wait(
-        <Future<http.Response>>[
+      final List<HorizonHttpResult> responses = await Future.wait(
+        <Future<HorizonHttpResult>>[
           _get(configuration, <String>['accounts', accountId]),
           _get(configuration, const <String>['fee_stats']),
         ],
       ).timeout(const Duration(seconds: 12));
       if (responses.any(
-        (http.Response response) =>
-            response.statusCode != 200 ||
-            response.bodyBytes.length > 128 * 1024,
+        (HorizonHttpResult response) =>
+            response.statusCode != 200 || response.bytes.length > 128 * 1024,
       )) {
         throw _unavailable();
       }
-      final Map<String, dynamic> account =
-          jsonDecode(utf8.decode(responses[0].bodyBytes))
-              as Map<String, dynamic>;
-      final Map<String, dynamic> fees =
-          jsonDecode(utf8.decode(responses[1].bodyBytes))
-              as Map<String, dynamic>;
+      final Map<String, dynamic> account = responses[0].decodeJson();
+      final Map<String, dynamic> fees = responses[1].decodeJson();
       final List<dynamic> balances = account['balances'] as List<dynamic>;
       double? nativeBalance;
       double nativeLiabilities = 0;
@@ -125,24 +124,13 @@ final class DirectDistributorStatusClient implements DistributorStatusClient {
     }
   }
 
-  Future<http.Response> _get(
+  Future<HorizonHttpResult> _get(
     ProviderConfiguration configuration,
     List<String> pathSegments,
-  ) => _client.get(
-    configuration.endpoint.replace(
-      pathSegments: <String>[
-        ...configuration.endpoint.pathSegments.where(
-          (String value) => value.isNotEmpty,
-        ),
-        ...pathSegments,
-      ],
-      query: null,
-      fragment: null,
-    ),
-    headers: <String, String>{
-      'accept': 'application/json',
-      'api-key': configuration.apiKey,
-    },
+  ) => _transport.request(
+    configuration: configuration,
+    pathSegments: pathSegments,
+    maximumResponseBytes: 128 * 1024,
   );
 
   WalletSdkException _unavailable() => const WalletSdkException(

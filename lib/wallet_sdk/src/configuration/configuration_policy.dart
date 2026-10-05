@@ -1,4 +1,5 @@
 import 'package:employee_wellness/wallet_sdk/src/configuration/provider_configuration.dart';
+import 'package:employee_wellness/wallet_sdk/src/protocol/rewards_amount.dart';
 import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
 
 final class ConfigurationPolicy {
@@ -8,6 +9,22 @@ final class ConfigurationPolicy {
   static const int _maximumApiKeyLength = 512;
 
   ProviderConfiguration validate(ProviderConfigurationInput input) {
+    late final BigInt funding;
+    late final BigInt rewards;
+    try {
+      funding = RewardsAmount.parse(input.activationFunding.trim());
+      rewards = RewardsAmount.parse(input.initialRewards.trim());
+      if (funding < BigInt.from(15000000) || rewards <= BigInt.zero) {
+        throw const FormatException();
+      }
+    } catch (_) {
+      throw const WalletSdkException(
+        code: WalletSdkFailureCode.invalidProviderConfiguration,
+        safeMessage:
+            'Account funding must be at least 1.5 and initial Rewards must be positive, with up to seven decimal places.',
+        canRetry: true,
+      );
+    }
     final String endpointValue = input.endpoint.trim();
     final String apiKey = input.apiKey.trim();
     final Uri? endpoint = Uri.tryParse(endpointValue);
@@ -42,6 +59,8 @@ final class ConfigurationPolicy {
       apiKey: apiKey,
       environment: input.environment,
       version: input.version,
+      activationFundingUnits: funding.toInt(),
+      initialRewardsUnits: rewards.toInt(),
     );
   }
 }

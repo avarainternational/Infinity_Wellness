@@ -67,6 +67,26 @@ class AppPages {
       binding: WalletBinding(),
     ),
     GetPage<dynamic>(
+      name: Routes.walletConfigurationRequest,
+      page: WalletConfigurationRequestScreen.new,
+      binding: WalletBinding(),
+    ),
+    GetPage<dynamic>(
+      name: Routes.walletConfigurationScan,
+      page: WalletConfigurationScanScreen.new,
+      binding: WalletBinding(),
+    ),
+    GetPage<dynamic>(
+      name: Routes.walletConfigurationReview,
+      page: WalletConfigurationReviewScreen.new,
+      binding: WalletBinding(),
+    ),
+    GetPage<dynamic>(
+      name: Routes.walletConfigurationOutcome,
+      page: WalletConfigurationOutcomeScreen.new,
+      binding: WalletBinding(),
+    ),
+    GetPage<dynamic>(
       name: Routes.walletLocked,
       page: WalletLockedScreen.new,
       binding: WalletBinding(),
@@ -104,6 +124,21 @@ class AppPages {
     GetPage<dynamic>(
       name: Routes.appMasterActivationQr,
       page: AppMasterActivationQrScreen.new,
+      binding: AppMasterBinding(),
+    ),
+    GetPage<dynamic>(
+      name: Routes.appMasterConfigurationScan,
+      page: AppMasterConfigurationScanScreen.new,
+      binding: AppMasterBinding(),
+    ),
+    GetPage<dynamic>(
+      name: Routes.appMasterConfigurationReview,
+      page: AppMasterConfigurationReviewScreen.new,
+      binding: AppMasterBinding(),
+    ),
+    GetPage<dynamic>(
+      name: Routes.appMasterConfigurationQr,
+      page: AppMasterConfigurationQrScreen.new,
       binding: AppMasterBinding(),
     ),
   ];

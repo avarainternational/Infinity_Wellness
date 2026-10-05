@@ -22,36 +22,33 @@ class FeatureHeader extends StatelessWidget {
       children: <Widget>[
         Row(
           children: <Widget>[
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppDimens.radiusSm),
-                  child: Image.asset(
-                    AppImages.logo,
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
+            Expanded(
+              child: Row(
+                children: <Widget>[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppDimens.radiusSm),
+                    child: Image.asset(
+                      AppImages.logo,
+                      width: 36,
+                      height: 36,
+                      fit: BoxFit.cover,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'INFINITY WELLNESS',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: AppColors.primaryDarkBlue,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'INFINITY WELLNESS',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: AppColors.primaryDarkBlue,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const Spacer(),
-            trailing ??
-                IconButton.filledTonal(
-                  onPressed: () {},
-                  tooltip: 'Notifications preview',
-                  icon: const Icon(Icons.notifications_none_rounded),
-                ),
+            if (trailing != null) trailing!,
           ],
         ),
         const SizedBox(height: 20),

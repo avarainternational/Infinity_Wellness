@@ -5,26 +5,64 @@ import 'package:employee_wellness/app/core/base/base_controller.dart';
 import 'package:employee_wellness/app/features/app_master/service/qr_input_adapter.dart';
 import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
 
-class MockEmployeePoints {
-  const MockEmployeePoints({
-    required this.name,
-    required this.rewardsBalance,
-    required this.status,
-    required this.lastChecked,
-  });
-
-  final String name;
-  final String rewardsBalance;
-  final String status;
-  final String lastChecked;
-}
-
 class AppMasterController extends BaseController {
   AppMasterController(this._walletSdk, {QrInputAdapter? qrInputAdapter})
     : qrInputAdapter = qrInputAdapter ?? QrInputAdapter();
 
   final WalletSdk _walletSdk;
   final QrInputAdapter qrInputAdapter;
+
+  final RxList<BuilderAccessEntry> rosterEntries = <BuilderAccessEntry>[].obs;
+  final Rxn<AppMasterRosterPage> rosterPage = Rxn<AppMasterRosterPage>();
+  final RxBool isLoadingRoster = false.obs;
+  final RxString rosterError = ''.obs;
+
+  Future<void> loadRoster({bool more = false}) async {
+    if (isLoadingRoster.value ||
+        (more && rosterPage.value?.nextCursor == null)) {
+      return;
+    }
+    isLoadingRoster.value = true;
+    rosterError.value = '';
+    final previous = rosterPage.value;
+    if (!more) {
+      rosterEntries.clear();
+      rosterPage.value = null;
+    }
+    try {
+      final page = await _walletSdk.getAppMasterRoster(
+        cursor: more ? previous?.nextCursor : null,
+      );
+      if (isClosed) return;
+      if (more &&
+          (page.environment != previous?.environment ||
+              page.authorityAccount != previous?.authorityAccount)) {
+        throw const WalletSdkException(
+          code: WalletSdkFailureCode.rosterAccessDenied,
+          safeMessage:
+              'Refresh Employee access after changing Wellness Admin settings.',
+          canRetry: false,
+        );
+      }
+      final ids = rosterEntries.map((entry) => entry.id).toSet();
+      if (page.entries.any((entry) => ids.contains(entry.id))) {
+        throw StateError('Non-progressing roster.');
+      }
+      rosterEntries.addAll(page.entries);
+      rosterPage.value = page;
+    } on WalletSdkException catch (error) {
+      rosterEntries.clear();
+      rosterPage.value = null;
+      rosterError.value = employeeFacingText(error.safeMessage);
+    } catch (_) {
+      rosterEntries.clear();
+      rosterPage.value = null;
+      rosterError.value =
+          'Employee access is unavailable. Refresh or contact your administrator.';
+    } finally {
+      isLoadingRoster.value = false;
+    }
+  }
 
   String nowNodesEndpoint = 'https://xlm.nownodes.io';
   String nowNodesApiKey = '';
@@ -54,29 +92,16 @@ class AppMasterController extends BaseController {
   final RxBool isCreatingActivationResponse = false.obs;
   final RxString activationResponseError = ''.obs;
   String? _pendingActivationRequestValue;
+  final Rxn<ConfigurationRequestReview> configurationRequestReview =
+      Rxn<ConfigurationRequestReview>();
+  final Rxn<ConfigurationUpdateView> configurationUpdate =
+      Rxn<ConfigurationUpdateView>();
+  final RxBool isImportingConfigurationRequest = false.obs;
+  final RxBool isInspectingConfigurationRequest = false.obs;
+  final RxBool isCreatingConfigurationUpdate = false.obs;
+  final RxString configurationRotationError = ''.obs;
 
   String? get pendingActivationRequestValue => _pendingActivationRequestValue;
-
-  static const List<MockEmployeePoints> builders = <MockEmployeePoints>[
-    MockEmployeePoints(
-      name: 'Jordan Rivers',
-      rewardsBalance: '1,250 POINTS',
-      status: 'Wellness Points ready',
-      lastChecked: 'Just now',
-    ),
-    MockEmployeePoints(
-      name: 'Maya Chen',
-      rewardsBalance: '840 POINTS',
-      status: 'Wellness Points ready',
-      lastChecked: '2 minutes ago',
-    ),
-    MockEmployeePoints(
-      name: 'Noah Williams',
-      rewardsBalance: '0 POINTS',
-      status: 'Pending activation',
-      lastChecked: 'Waiting for approval',
-    ),
-  ];
 
   @override
   void onReady() {
@@ -85,6 +110,7 @@ class AppMasterController extends BaseController {
     restoreDistributorAuthorityStatus();
     restoreActivationRequestReview();
     refreshOverview();
+    loadRoster();
   }
 
   Future<void> restoreProviderConfigurationStatus() async {
@@ -92,6 +118,8 @@ class AppMasterController extends BaseController {
       final ProviderConfigurationStatus status = await _walletSdk
           .getProviderConfigurationStatus();
       providerConfigurationStatus.value = status;
+      activationFunding = status.activationFunding;
+      initialRewards = status.initialRewards;
       if (status.environment != null) {
         providerEnvironment.value = status.environment!;
       }
@@ -100,6 +128,9 @@ class AppMasterController extends BaseController {
           "We couldn't load the service status. Try again.";
     }
   }
+
+  String activationFunding = '2.1';
+  String initialRewards = '1';
 
   Future<void> saveProviderConfiguration() async {
     if (isSavingProviderConfiguration.value) {
@@ -116,6 +147,8 @@ class AppMasterController extends BaseController {
               apiKey: nowNodesApiKey.trim(),
               environment: providerEnvironment.value,
               version: (providerConfigurationStatus.value.version ?? 0) + 1,
+              activationFunding: activationFunding,
+              initialRewards: initialRewards,
             ),
           );
       providerConfigurationStatus.value = outcome.status;
@@ -186,7 +219,7 @@ class AppMasterController extends BaseController {
     }
   }
 
-  void openEmployeeWallet() => Get.offAllNamed(Routes.wallet);
+  void openBuilderWallet() => Get.offAllNamed(Routes.wallet);
 
   void openAdvanced() => Get.offAllNamed(Routes.appMasterAdvanced);
 
@@ -196,6 +229,81 @@ class AppMasterController extends BaseController {
     qrInputError.value = '';
     Get.toNamed(Routes.appMasterActivationScan);
   }
+
+  void openConfigurationScanner() {
+    configurationRotationError.value = '';
+    Get.toNamed(Routes.appMasterConfigurationScan);
+  }
+
+  Future<void> importConfigurationRequest() async {
+    if (isImportingConfigurationRequest.value) return;
+    configurationRotationError.value = '';
+    isImportingConfigurationRequest.value = true;
+    try {
+      final QrInputResult result = await qrInputAdapter.importFromGallery();
+      if (result.isSuccess) {
+        await acceptConfigurationRequest(result.value!);
+      } else if (result.failure != QrInputFailure.cancelled) {
+        configurationRotationError.value = switch (result.failure!) {
+          QrInputFailure.permissionDenied =>
+            'Photo access was denied. Scan the request QR instead.',
+          QrInputFailure.unreadable =>
+            "We couldn't find a readable configuration QR in that image.",
+          QrInputFailure.multipleCodes =>
+            'Use an image containing only one configuration QR.',
+          QrInputFailure.cancelled => '',
+        };
+      }
+    } finally {
+      isImportingConfigurationRequest.value = false;
+    }
+  }
+
+  Future<void> acceptConfigurationRequest(String value) async {
+    if (isInspectingConfigurationRequest.value) return;
+    configurationRotationError.value = '';
+    isInspectingConfigurationRequest.value = true;
+    try {
+      configurationRequestReview.value = await _walletSdk
+          .inspectConfigurationRequest(value);
+      Get.offNamed(Routes.appMasterConfigurationReview);
+    } on WalletSdkException catch (error) {
+      configurationRotationError.value = employeeFacingText(error.safeMessage);
+      if (Get.currentRoute == Routes.appMasterConfigurationScan) {
+        Get.back<void>();
+      }
+    } catch (_) {
+      configurationRotationError.value =
+          "We couldn't inspect this configuration request. Try again.";
+      if (Get.currentRoute == Routes.appMasterConfigurationScan) {
+        Get.back<void>();
+      }
+    } finally {
+      isInspectingConfigurationRequest.value = false;
+    }
+  }
+
+  Future<void> createConfigurationUpdate() async {
+    final ConfigurationRequestReview? review = configurationRequestReview.value;
+    if (review == null || isCreatingConfigurationUpdate.value) return;
+    configurationRotationError.value = '';
+    isCreatingConfigurationUpdate.value = true;
+    try {
+      configurationUpdate.value = await _walletSdk.createConfigurationUpdate(
+        review.requestId,
+      );
+      Get.toNamed(Routes.appMasterConfigurationQr);
+    } on WalletSdkException catch (error) {
+      configurationRotationError.value = employeeFacingText(error.safeMessage);
+    } catch (_) {
+      configurationRotationError.value =
+          "We couldn't create the configuration update. Try again.";
+    } finally {
+      isCreatingConfigurationUpdate.value = false;
+    }
+  }
+
+  void finishConfigurationUpdate() => Get.offAllNamed(Routes.appMasterAdvanced);
 
   Future<void> importActivationRequest() async {
     if (isImportingActivationRequest.value) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
+import 'package:employee_wellness/wallet_sdk/src/transport/horizon_http_client.dart';
 import 'package:employee_wellness/wallet_sdk/src/configuration/provider_configuration.dart';
 
 enum ActivationSubmissionResult { accepted, rejected, uncertain }
@@ -14,10 +15,15 @@ abstract interface class ActivationSubmissionClient {
 
 final class DirectActivationSubmissionClient
     implements ActivationSubmissionClient {
-  DirectActivationSubmissionClient({http.Client? client})
-    : _client = client ?? http.Client();
+  DirectActivationSubmissionClient({
+    http.Client? client,
+    HorizonHttpClient? transport,
+  }) : _transport = HorizonHttpClient.resolve(
+         client: client,
+         transport: transport,
+       );
 
-  final http.Client _client;
+  final HorizonHttpClient _transport;
 
   @override
   Future<ActivationSubmissionResult> submit({
@@ -25,24 +31,17 @@ final class DirectActivationSubmissionClient
     required String envelopeXdr,
   }) async {
     try {
-      final http.Response response = await _client
-          .post(
-            configuration.endpoint.replace(
-              pathSegments: <String>[
-                ...configuration.endpoint.pathSegments.where(
-                  (String value) => value.isNotEmpty,
-                ),
-                'transactions',
-              ],
-              query: null,
-              fragment: null,
-            ),
+      final HorizonHttpResult response = await _transport
+          .request(
+            configuration: configuration,
+            method: 'POST',
+            pathSegments: const <String>['transactions'],
             headers: <String, String>{
               'accept': 'application/json',
               'api-key': configuration.apiKey,
               'content-type': 'application/x-www-form-urlencoded',
             },
-            body: <String, String>{'tx': envelopeXdr},
+            formFields: <String, String>{'tx': envelopeXdr},
           )
           .timeout(const Duration(seconds: 15));
       if (response.statusCode >= 200 && response.statusCode < 300) {

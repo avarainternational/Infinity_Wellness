@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:employee_wellness/app/core/base/base_view.dart';
 import 'package:employee_wellness/app/features/app_master/controller/app_master_controller.dart';
+import 'package:employee_wellness/app/features/app_master/widget/builder_roster_section.dart';
 import 'package:employee_wellness/app/features/app_master/widget/app_master_page.dart';
 import 'package:employee_wellness/app/features/wallet/widget/wallet_screen_components.dart';
 import 'package:employee_wellness/app/features/wallet/widget/wallet_ui.dart';
@@ -40,7 +41,7 @@ class AppMasterAdvancedScreen extends BaseView<AppMasterController> {
             if (selection.contains('overview')) {
               viewController.finishActivation();
             } else if (selection.contains('rewards')) {
-              viewController.openEmployeeWallet();
+              viewController.openBuilderWallet();
             }
           },
         ),
@@ -110,6 +111,48 @@ class AppMasterAdvancedScreen extends BaseView<AppMasterController> {
                 () => WalletStatusBadge(
                   label: _statusLabel(
                     viewController.providerConfigurationStatus.value,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Activation settings',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              Obx(
+                () => TextFormField(
+                  key: ValueKey(
+                    'funding-${viewController.providerConfigurationStatus.value.version}',
+                  ),
+                  initialValue: viewController.activationFunding,
+                  onChanged: (value) =>
+                      viewController.activationFunding = value,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Account funding per activation',
+                    helperText:
+                        'Behind-the-scenes account funding. Minimum 1.5.',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Obx(
+                () => TextFormField(
+                  key: ValueKey(
+                    'rewards-${viewController.providerConfigurationStatus.value.version}',
+                  ),
+                  initialValue: viewController.initialRewards,
+                  onChanged: (value) => viewController.initialRewards = value,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Initial Wellness Points points',
+                    helperText:
+                        'Points granted to each newly activated Employee.',
                   ),
                 ),
               ),
@@ -217,7 +260,61 @@ class AppMasterAdvancedScreen extends BaseView<AppMasterController> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  'Administrator account',
+                  'Employee configuration updates',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Scan a Employee request to create an expiring, device-bound '
+                  'update from the current verified configuration.',
+                ),
+                if (viewController.configurationRotationError.value.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(
+                      viewController.configurationRotationError.value,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: viewController.openConfigurationScanner,
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Scan Employee update request'),
+                  ),
+                ),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        viewController.isImportingConfigurationRequest.value
+                        ? null
+                        : viewController.importConfigurationRequest,
+                    icon: viewController.isImportingConfigurationRequest.value
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.image_outlined),
+                    label: const Text('Import Employee request image'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Obx(
+          () => WalletCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'Distributor account',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
@@ -236,7 +333,7 @@ class AppMasterAdvancedScreen extends BaseView<AppMasterController> {
                   enableSuggestions: false,
                   autocorrect: false,
                   decoration: const InputDecoration(
-                    labelText: 'Administrator secret key',
+                    labelText: 'Distributor secret key',
                     helperText: 'Entered once and never displayed again',
                   ),
                 ),
@@ -245,8 +342,8 @@ class AppMasterAdvancedScreen extends BaseView<AppMasterController> {
                   label:
                       viewController.distributorAuthorityStatus.value.state ==
                           DistributorAuthorityState.ready
-                      ? 'Administrator verified'
-                      : 'Administrator not configured',
+                      ? 'Distributor verified'
+                      : 'Distributor not configured',
                 ),
                 if (viewController
                         .distributorAuthorityStatus
@@ -304,40 +401,7 @@ class AppMasterAdvancedScreen extends BaseView<AppMasterController> {
           ),
         ),
         const SizedBox(height: 18),
-        Text(
-          'Employee diagnostics',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 10),
-        ...AppMasterController.builders.map(
-          (MockEmployeePoints builder) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: WalletCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    builder.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 10),
-                  WalletReviewRow(
-                    label: 'Access status',
-                    value: builder.status,
-                  ),
-                  WalletReviewRow(
-                    label: 'Wellness Points balance',
-                    value: builder.rewardsBalance,
-                  ),
-                  WalletReviewRow(
-                    label: 'Last checked',
-                    value: builder.lastChecked,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        BuilderRosterSection(controller: controller),
         const WalletBoundaryNotice(
           icon: Icons.admin_panel_settings_outlined,
           text:

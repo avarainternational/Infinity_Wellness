@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:employee_wellness/wallet_sdk/src/transport/horizon_http_client.dart';
 import 'package:employee_wellness/wallet_sdk/src/configuration/provider_configuration.dart';
 import 'package:employee_wellness/wallet_sdk/src/crypto/strkey_codec.dart';
 import 'package:employee_wellness/wallet_sdk/wallet_sdk.dart';
@@ -43,46 +42,34 @@ abstract interface class DistributorAccountVerifier {
 
 final class HorizonDistributorAccountVerifier
     implements DistributorAccountVerifier {
-  HorizonDistributorAccountVerifier({http.Client? client})
-    : _client = client ?? http.Client();
+  HorizonDistributorAccountVerifier({
+    http.Client? client,
+    HorizonHttpClient? transport,
+  }) : _transport = HorizonHttpClient.resolve(
+         client: client,
+         transport: transport,
+       );
 
-  final http.Client _client;
+  final HorizonHttpClient _transport;
 
   @override
   Future<void> verify({
     required ProviderConfiguration configuration,
     required String accountId,
   }) async {
-    final Uri endpoint = configuration.endpoint.replace(
-      pathSegments: <String>[
-        ...configuration.endpoint.pathSegments.where(
-          (String segment) => segment.isNotEmpty,
-        ),
-        'accounts',
-        accountId,
-      ],
-      query: null,
-      fragment: null,
-    );
-    final http.Response response = await _client
-        .get(
-          endpoint,
-          headers: <String, String>{
-            'accept': 'application/json',
-            'api-key': configuration.apiKey,
-          },
-        )
-        .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200 || response.bodyBytes.length > 64 * 1024) {
-      throw const WalletSdkException(
-        code: WalletSdkFailureCode.distributorAccountUnavailable,
-        safeMessage: 'The distributor account could not be verified.',
-        canRetry: true,
-      );
-    }
-    final Object? decoded = jsonDecode(utf8.decode(response.bodyBytes));
-    if (decoded is! Map<String, dynamic> ||
-        decoded['account_id'] != accountId) {
+    try {
+      final HorizonHttpResult response = await _transport
+          .request(
+            configuration: configuration,
+            pathSegments: <String>['accounts', accountId],
+            maximumResponseBytes: 64 * 1024,
+          )
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200 ||
+          response.decodeJson()['account_id'] != accountId) {
+        throw const FormatException('Invalid account response.');
+      }
+    } catch (_) {
       throw const WalletSdkException(
         code: WalletSdkFailureCode.distributorAccountUnavailable,
         safeMessage: 'The distributor account could not be verified.',
