@@ -1,0 +1,34 @@
+sequenceDiagram
+    actor Master as Wellness Admin
+    participant MasterUI as Wellness Admin Advanced
+    participant EmployeeSDK as Employee WalletSdk
+    participant EmployeeSecure as Employee Protected Storage
+    participant MasterSDK as Wellness Admin WalletSdk
+    participant MasterSecure as Wellness Admin Protected Storage
+    participant Crypto as Configuration Crypto
+    participant Horizon as Horizon Endpoint
+
+    Master->>MasterUI: Enter NOWNodes endpoint and API key
+    MasterUI->>MasterSDK: saveAppMasterProviderConfiguration(input)
+    MasterSDK->>Horizon: Health check candidate configuration
+    Horizon-->>MasterSDK: Healthy response
+    MasterSDK->>MasterSecure: Commit protected configuration
+    MasterSDK-->>MasterUI: Safe status and configuration version
+    MasterUI-->>Master: Clear key field and show ready
+    EmployeeSDK->>EmployeeSecure: Create and store device configuration identity
+    EmployeeSecure-->>EmployeeSDK: Device ID and public encryption key
+    EmployeeSDK-->>MasterSDK: Activation request QR with device binding
+    MasterSDK->>MasterSecure: Read provider configuration
+    MasterSecure-->>MasterSDK: Endpoint, headers, and configuration version
+    MasterSDK->>Crypto: Encrypt configuration for Employee device
+    Crypto-->>MasterSDK: Device-bound ciphertext
+    MasterSDK->>MasterSDK: Authorize response and bind request, device, expiry, version
+    MasterSDK-->>EmployeeSDK: Activation response QR
+    EmployeeSDK->>EmployeeSDK: Verify authorization and device binding
+    EmployeeSDK->>EmployeeSecure: Read device configuration identity
+    EmployeeSecure-->>EmployeeSDK: Protected decryption handle
+    EmployeeSDK->>Crypto: Decrypt candidate configuration
+    Crypto-->>EmployeeSDK: Candidate endpoint and provider headers
+    EmployeeSDK->>Horizon: Health check with candidate configuration
+    Horizon-->>EmployeeSDK: Healthy response
+    EmployeeSDK->>EmployeeSecure: Commit provider configuration

@@ -1,0 +1,21 @@
+sequenceDiagram
+    actor Master as Wellness Admin
+    participant MasterSDK as Wellness Admin WalletSdk
+    participant Provider as Provider Dashboard
+    participant EmployeeSDK as Employee WalletSdk
+    participant Roster as Local Employee Roster
+
+    Master->>Provider: Create replacement API key
+    Provider-->>Master: Old and new keys active
+    Master->>MasterSDK: Save configuration version N plus 1
+    loop Each Employee device
+        EmployeeSDK-->>MasterSDK: Configuration request QR
+        MasterSDK-->>EmployeeSDK: Device-bound update QR
+        EmployeeSDK->>EmployeeSDK: Validate, health-check, and commit
+        opt Confirmation receipt is used
+            EmployeeSDK-->>MasterSDK: Applied-version receipt QR
+            MasterSDK->>Roster: Mark device updated
+        end
+    end
+    Master->>Roster: Review migration policy and known device status
+    Master->>Provider: Revoke old key after overlap window

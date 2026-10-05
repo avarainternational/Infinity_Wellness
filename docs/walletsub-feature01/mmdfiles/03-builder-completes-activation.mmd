@@ -1,0 +1,19 @@
+sequenceDiagram
+    actor Employee
+    participant Screen as Wellness Points Screen
+    participant Controller as WalletController
+    participant SDK as WalletSdk
+
+    Employee->>Screen: Interaction 8 - Scan or import response QR
+    Screen->>Controller: inspectResponse(qrValue)
+    Controller->>SDK: inspectActivationResponse(qrValue)
+    SDK-->>Controller: ActivationReview
+    Controller-->>Screen: Safe review state
+    Screen-->>Employee: Interaction 9 - Show activation review
+    Employee->>Screen: Interaction 10 - Approve activation
+    Screen->>Controller: approveActivation(responseId)
+    Controller->>SDK: approveActivation(responseId)
+    Note over SDK: Verify, health-check, and install NOWNodes configuration
+    SDK-->>Controller: ActivationOutcome
+    Controller-->>Screen: Safe outcome state
+    Screen-->>Employee: Interaction 11 - Show verified Wellness Points

@@ -1,0 +1,13 @@
+sequenceDiagram
+    actor Employee
+    participant Screen as Wellness Points Screen
+    participant Controller as WalletController
+    participant SDK as WalletSdk
+
+    Employee->>Screen: Interaction 1 - Enter name and phone
+    Employee->>Screen: Interaction 2 - Start activation
+    Screen->>Controller: startActivation()
+    Controller->>SDK: startActivation(builder)
+    SDK-->>Controller: ActivationRequestView
+    Controller-->>Screen: Request view state
+    Screen-->>Employee: Interaction 3 - Show request QR

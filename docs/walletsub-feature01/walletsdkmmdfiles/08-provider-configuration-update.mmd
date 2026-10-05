@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant EmployeeUI as Employee Settings
+    participant EmployeeSDK as Employee WalletSdk
+    participant MasterUI as Wellness Admin Settings
+    participant MasterSDK as Wellness Admin WalletSdk
+    participant Secure as Protected Storage
+
+    EmployeeUI->>EmployeeSDK: createConfigurationRequest()
+    EmployeeSDK->>EmployeeSDK: Create challenge and device-bound request
+    EmployeeSDK-->>EmployeeUI: ConfigurationRequestView with opaque QR
+    MasterUI->>MasterSDK: inspectConfigurationRequest(qrValue)
+    MasterSDK-->>MasterUI: Safe device and environment review
+    MasterUI->>MasterSDK: createConfigurationUpdate(requestId)
+    MasterSDK->>Secure: Read current provider configuration
+    Secure-->>MasterSDK: Endpoint, headers, and new version
+    MasterSDK->>MasterSDK: Encrypt for device and authorize update
+    MasterSDK-->>MasterUI: ConfigurationUpdateView with opaque QR
+    EmployeeUI->>EmployeeSDK: inspectConfigurationUpdate(qrValue)
+    EmployeeSDK->>EmployeeSDK: Validate authorization, binding, expiry, replay, and version
+    EmployeeSDK-->>EmployeeUI: Safe ConfigurationReview
+    EmployeeUI->>EmployeeSDK: applyConfigurationUpdate(updateId)
+    EmployeeSDK->>Secure: Save candidate configuration as pending
+    EmployeeSDK->>EmployeeSDK: Run provider health check
+    EmployeeSDK->>Secure: Promote candidate and remove previous configuration
+    EmployeeSDK-->>EmployeeUI: ConfigurationOutcome

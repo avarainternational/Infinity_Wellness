@@ -1,0 +1,19 @@
+sequenceDiagram
+    actor Employee
+    participant EmployeeUI as Employee App
+    actor Master as Wellness Admin
+    participant MasterUI as Wellness Admin App
+
+    Master->>MasterUI: Interaction 0 - Save NOWNodes configuration
+    MasterUI-->>Master: Configuration verified and ready
+    Employee->>EmployeeUI: Interaction 1 - Enter name and phone
+    Employee->>EmployeeUI: Interaction 2 - Start activation
+    EmployeeUI-->>Employee: Interaction 3 - Show request QR
+    Master->>MasterUI: Interaction 4 - Scan or import request QR
+    MasterUI-->>Master: Interaction 5 - Show Employee review
+    Master->>MasterUI: Interaction 6 - Approve setup
+    MasterUI-->>Master: Interaction 7 - Show response QR with protected configuration
+    Employee->>EmployeeUI: Interaction 8 - Scan or import response QR
+    EmployeeUI-->>Employee: Interaction 9 - Show activation review
+    Employee->>EmployeeUI: Interaction 10 - Approve activation
+    EmployeeUI-->>Employee: Interaction 11 - Install configuration and show verified Wellness Points
